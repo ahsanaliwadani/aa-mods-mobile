@@ -71,3 +71,18 @@ export async function notifyNewApp(appName: string, category: string): Promise<v
     ...(Platform.OS === "android" ? { channelId: "aa-mods-updates" } : {}),
   });
 }
+
+export async function notifyInstalledAppsUpdated(appNames: string[], count: number): Promise<void> {
+  const title = count === 1 ? "App Update Available" : `${count} Apps Need Updates`;
+  const body =
+    count === 1
+      ? `${appNames[0]} has a new version — tap to update now.`
+      : `${appNames.slice(0, 2).join(", ")}${count > 2 ? ` +${count - 2} more` : ""} have new versions available.`;
+  await schedule({
+    title,
+    body,
+    data: { type: "installed_update", count, appNames },
+    sound: "default",
+    ...(Platform.OS === "android" ? { channelId: "aa-mods-updates" } : {}),
+  });
+}

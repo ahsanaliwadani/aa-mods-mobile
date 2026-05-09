@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog, type LiveStoreCatalogApp } from "@/hooks/useFirebaseCatalog";
 import { useAppUpdateChecker } from "@/hooks/useAppUpdateChecker";
+import { useInstalledAppUpdates } from "@/hooks/useInstalledAppUpdates";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useUserData } from "@/contexts/UserDataContext";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
@@ -156,6 +157,57 @@ const bannerStyles = StyleSheet.create({
   dismissBtn: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
   requiredBadge: { backgroundColor: "rgba(255,68,68,0.15)", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
   requiredBadgeText: { color: "#ff4444", fontSize: 8, fontWeight: "800", fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
+});
+
+function InstalledUpdatesBanner({ apps, onPress }: { apps: LiveStoreCatalogApp[]; onPress: () => void }) {
+  const colors = useColors();
+  if (apps.length === 0) return null;
+  const names = apps.map((a) => a.name);
+  const label =
+    apps.length === 1
+      ? `${names[0]} has a new version available`
+      : `${names.slice(0, 2).join(", ")}${apps.length > 2 ? ` +${apps.length - 2} more` : ""} need updates`;
+  return (
+    <Pressable
+      onPress={() => { haptics.light(); onPress(); }}
+      style={({ pressed }) => [
+        iubStyles.banner,
+        { backgroundColor: "rgba(251,191,36,0.07)", borderColor: "rgba(251,191,36,0.4)", opacity: pressed ? 0.85 : 1 },
+      ]}
+    >
+      <View style={iubStyles.left}>
+        <View style={iubStyles.iconWrap}>
+          <Ionicons name="arrow-up-circle" size={20} color="#fbbf24" />
+          {apps.length > 1 && (
+            <View style={iubStyles.countBubble}>
+              <Text style={iubStyles.countText}>{apps.length}</Text>
+            </View>
+          )}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[iubStyles.title, { color: colors.foreground }]}>
+            {apps.length === 1 ? "Update Available" : `${apps.length} Updates Available`}
+          </Text>
+          <Text style={[iubStyles.sub, { color: colors.mutedForeground }]} numberOfLines={1}>{label}</Text>
+        </View>
+      </View>
+      <View style={[iubStyles.action, { backgroundColor: "#fbbf24" }]}>
+        <Text style={iubStyles.actionText}>Update All</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+const iubStyles = StyleSheet.create({
+  banner: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginTop: 10, borderRadius: 14, borderWidth: 1, padding: 12, gap: 10 },
+  left: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  iconWrap: { position: "relative" },
+  countBubble: { position: "absolute", top: -5, right: -6, backgroundColor: "#fbbf24", borderRadius: 8, minWidth: 14, height: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: 2 },
+  countText: { color: "#04131b", fontSize: 8, fontWeight: "800", fontFamily: "Inter_700Bold" },
+  title: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  sub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  action: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  actionText: { color: "#04131b", fontSize: 12, fontWeight: "800", fontFamily: "Inter_700Bold" },
 });
 
 function QuickActionSheet({ app, visible, onClose, isFav, onToggleFav, onShare, onOpen }: {
@@ -350,6 +402,7 @@ export default function HomeScreen() {
 
   const { apps, categories, loading, connected, lastUpdated } = useFirebaseCatalog();
   const { updateInfo, shouldShow, isMandatory, dismiss } = useAppUpdateChecker();
+  const { appsWithUpdates } = useInstalledAppUpdates(apps);
   const { config } = useRemoteConfig();
   const { isFavorite, toggleFavorite } = useUserData();
   const dm = useDownloadManager();
@@ -546,6 +599,18 @@ export default function HomeScreen() {
                 onUpdate={handleBannerUpdate}
               />
             ) : null}
+            {appsWithUpdates.length > 0 && (
+              <InstalledUpdatesBanner
+                apps={appsWithUpdates}
+                onPress={() => {
+                  if (appsWithUpdates.length === 1) {
+                    router.push(`/app/${appsWithUpdates[0].slug}`);
+                  } else {
+                    router.push("/(tabs)/updates");
+                  }
+                }}
+              />
+            )}
 
             {/* Featured — horizontal ScrollView (no nested FlatList) */}
             {featuredApps.length > 0 && (

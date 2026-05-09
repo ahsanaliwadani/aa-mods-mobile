@@ -1,12 +1,9 @@
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -78,8 +75,6 @@ export default function AppDetailScreen() {
   const dlSheet = useDownloadSheet();
 
   const [showFullChangelog, setShowFullChangelog] = useState(false);
-  const [screenshotIdx, setScreenshotIdx] = useState<number | null>(null);
-  const SCREEN_W = Dimensions.get("window").width;
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
@@ -196,7 +191,6 @@ export default function AppDetailScreen() {
   const seeMoreMods = detail?.seeMoreMods;
   const fileSize = detail?.fileSize;
   const androidReq = detail?.androidRequirement;
-  const screenshots = detail?.screenshots;
   const permissions = detail?.permissions;
   const features = detail?.features;
 
@@ -451,23 +445,6 @@ export default function AppDetailScreen() {
           </SectionBlock>
         )}
 
-        {/* Screenshot Gallery */}
-        {screenshots && screenshots.length > 0 && (
-          <View style={styles.screenshotSection}>
-            <View style={[styles.sectionHeader, { marginBottom: 10 }]}>
-              <Ionicons name="images-outline" size={16} color={colors.accent} />
-              <Text style={[styles.sectionTitle, { color: colors.accent }]}>SCREENSHOTS</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.screenshotScroll} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
-              {screenshots.map((uri, idx) => (
-                <Pressable key={idx} onPress={() => { haptics.light(); setScreenshotIdx(idx); }}>
-                  <Image source={{ uri }} style={styles.screenshotThumb} contentFit="cover" />
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
         {/* Features */}
         {features && features.length > 0 && (
           <SectionBlock icon="sparkles-outline" title="MOD FEATURES" color={colors.primary} bgColor="rgba(0,230,115,0.04)" borderColor="rgba(0,230,115,0.18)">
@@ -682,45 +659,6 @@ export default function AppDetailScreen() {
         onClose={dlSheet.close}
       />
 
-      {/* Screenshot Fullscreen Viewer */}
-      {screenshots && screenshots.length > 0 && screenshotIdx !== null && (
-        <Modal
-          visible={screenshotIdx !== null}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setScreenshotIdx(null)}
-          statusBarTranslucent
-        >
-          <Pressable style={styles.screenshotOverlay} onPress={() => setScreenshotIdx(null)}>
-            <View style={styles.screenshotFull}>
-              <Image
-                source={{ uri: screenshots[screenshotIdx] }}
-                style={[styles.screenshotFullImg, { width: SCREEN_W - 32 }]}
-                contentFit="contain"
-              />
-              <View style={styles.screenshotNav}>
-                <Pressable
-                  onPress={() => setScreenshotIdx((i) => (i !== null && i > 0 ? i - 1 : screenshots.length - 1))}
-                  style={styles.screenshotNavBtn}
-                  hitSlop={12}
-                >
-                  <Ionicons name="chevron-back" size={22} color="#fff" />
-                </Pressable>
-                <Text style={styles.screenshotCounter}>
-                  {screenshotIdx + 1} / {screenshots.length}
-                </Text>
-                <Pressable
-                  onPress={() => setScreenshotIdx((i) => (i !== null && i < screenshots.length - 1 ? i + 1 : 0))}
-                  style={styles.screenshotNavBtn}
-                  hitSlop={12}
-                >
-                  <Ionicons name="chevron-forward" size={22} color="#fff" />
-                </Pressable>
-              </View>
-            </View>
-          </Pressable>
-        </Modal>
-      )}
     </View>
   );
 }
@@ -820,15 +758,6 @@ const styles = StyleSheet.create({
   seeMoreRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderTopWidth: 1, marginTop: 4 },
   seeMoreText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
   shimmerLine: { height: 12, borderRadius: 6, marginBottom: 6 },
-  screenshotSection: { gap: 2 },
-  screenshotScroll: {},
-  screenshotThumb: { width: 120, height: 200, borderRadius: 12 },
-  screenshotOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center" },
-  screenshotFull: { alignItems: "center", gap: 16 },
-  screenshotFullImg: { height: 420, borderRadius: 16 },
-  screenshotNav: { flexDirection: "row", alignItems: "center", gap: 24 },
-  screenshotNavBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  screenshotCounter: { color: "#fff", fontSize: 14, fontFamily: "Inter_600SemiBold" },
   notFoundContainer: { flex: 1 },
   notFoundContent: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
   notFoundTitle: { fontSize: 20, fontWeight: "800", fontFamily: "Inter_700Bold" },
