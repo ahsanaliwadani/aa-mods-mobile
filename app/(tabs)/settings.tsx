@@ -485,13 +485,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        <View style={[sStyles.notifInfo, { backgroundColor: "rgba(34,211,238,0.05)", borderColor: "rgba(34,211,238,0.2)" }]}>
-          <Ionicons name="information-circle-outline" size={14} color={colors.accent} />
-          <Text style={[sStyles.notifInfoText, { color: colors.mutedForeground }]}>
-            Push notifications use Firebase Cloud Messaging (FCM) on Android and APNs on iOS via Expo. 
-            OneSignal handles remote campaign alerts. Local notifications fire instantly on download events.
-          </Text>
-        </View>
       </View>
 
       {/* FAVORITES */}
@@ -627,17 +620,17 @@ export default function SettingsScreen() {
           <View style={sStyles.infoRows}>
             {[
               { label: "Developer", value: "AA Mods Team" },
-              { label: "Total Apps", value: `${apps.length} MOD APKs` },
-              { label: "Categories", value: `${totalCategories} categories` },
-              { label: "Cache Size", value: cacheSize },
-              { label: "License", value: "Free — always" },
+              { label: "Platform", value: "Expo React Native" },
+              { label: "Downloads", value: "MediaFire · Direct APK" },
+              { label: "APK Cache", value: cacheSize },
+              { label: "Security", value: "Verified & Safe" },
             ].map(({ label, value }, i, arr) => (
               <View key={label}>
                 <View style={sStyles.infoRow}>
                   <Text style={[sStyles.infoLabel, { color: colors.mutedForeground }]}>{label}</Text>
                   <Text style={[sStyles.infoValue, { color: colors.foreground }]}>{value}</Text>
                 </View>
-                {i < arr.length - 1 && <View style={[sStyles.divider, { backgroundColor: colors.border }]} />}
+                {i < arr.length - 1 ? <View style={[sStyles.divider, { backgroundColor: colors.border }]} /> : null}
               </View>
             ))}
           </View>

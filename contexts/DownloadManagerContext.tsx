@@ -160,6 +160,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       speedTracker.current.set(slug, { lastBytes: 0, lastTime: Date.now() });
 
       let resolvedLink = link;
+      let resolvedFromMediaFire = false;
 
       if (isMediaFireUrl(link)) {
         setDownloads((prev) => {
@@ -172,19 +173,20 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         const direct = await resolveMediaFireLink(link);
         if (direct) {
           resolvedLink = direct;
+          resolvedFromMediaFire = true;
         } else {
           updateEntry(slug, {
             phase: "error",
-            error: "Could not extract direct link from MediaFire. Try opening the download page manually.",
+            error: "Could not resolve MediaFire link. Check your connection and try again.",
           });
           return;
         }
       }
 
-      if (!isDirectApkUrl(resolvedLink)) {
+      if (!resolvedFromMediaFire && !isDirectApkUrl(resolvedLink)) {
         updateEntry(slug, {
           phase: "error",
-          error: "This link is not a direct APK download. Open it in the browser.",
+          error: "This link is not a direct APK download. Open it in a browser.",
         });
         return;
       }
