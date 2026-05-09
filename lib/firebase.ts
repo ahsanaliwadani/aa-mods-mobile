@@ -9,6 +9,7 @@ export const FIREBASE_CONFIG = {
   storageBucket: "aa-mods.firebasestorage.app",
   messagingSenderId: "208308827331",
   appId: "1:208308827331:android:a20b1c534f2b7df892de76",
+  measurementId: "G-SEFN4WE4PT",
 };
 
 export const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApp();

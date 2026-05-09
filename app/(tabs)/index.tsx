@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
+import { FooterDisclaimer } from "@/components/FooterDisclaimer";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
@@ -423,17 +424,11 @@ export default function HomeScreen() {
               <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
             </View>
           </View>
-          <View style={{ alignItems: "flex-end", gap: 4 }}>
-            <View style={[styles.headerBadge, { backgroundColor: "rgba(0,230,115,0.12)", borderColor: "rgba(0,230,115,0.3)" }]}>
-              <LiveDot />
-              <Text style={[styles.headerBadgeText, { color: colors.primary }]}>
-                {connected ? "LIVE" : "OFFLINE"}
-              </Text>
-            </View>
-            {lastUpdatedStr && (
+          {lastUpdatedStr ? (
+            <View style={{ alignItems: "flex-end", gap: 4 }}>
               <Text style={[styles.updatedAt, { color: colors.mutedForeground }]}>Updated {lastUpdatedStr}</Text>
-            )}
-          </View>
+            </View>
+          ) : null}
         </View>
 
         <ScrollView
@@ -556,6 +551,7 @@ export default function HomeScreen() {
             </View>
           )
         }
+        ListFooterComponent={<FooterDisclaimer />}
       />
 
       <QuickActionSheet

@@ -4,6 +4,15 @@ import { app } from "./firebase";
 let analyticsInstance: ReturnType<typeof getAnalytics> | null = null;
 let analyticsReady = false;
 
+// Suppress the Firebase Analytics measurement ID mismatch warning (expected
+// when using an Android app ID on web — analytics still works in degraded mode)
+const _origWarn = console.warn;
+console.warn = (...args: unknown[]) => {
+  const msg = typeof args[1] === "string" ? args[1] : "";
+  if (msg.includes("measurement ID")) return;
+  _origWarn.apply(console, args);
+};
+
 isSupported()
   .then((supported) => {
     if (supported) {

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { FooterDisclaimer } from "@/components/FooterDisclaimer";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   FlatList,
@@ -245,6 +246,7 @@ export default function SearchScreen() {
             </View>
           ) : null
         }
+        ListFooterComponent={<FooterDisclaimer />}
       />
     </View>
   );

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { FooterDisclaimer } from "@/components/FooterDisclaimer";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import Constants from "expo-constants";
@@ -298,6 +299,7 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </View>
+      <FooterDisclaimer />
     </ScrollView>
   );
 }

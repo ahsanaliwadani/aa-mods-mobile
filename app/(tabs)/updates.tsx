@@ -2,6 +2,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState, useCallback } from "react";
+import { FooterDisclaimer } from "@/components/FooterDisclaimer";
 import {
   FlatList,
   Platform,
@@ -298,6 +299,7 @@ export default function UpdatesScreen() {
             </Text>
           </View>
         }
+        ListFooterComponent={<FooterDisclaimer />}
       />
     </View>
   );
