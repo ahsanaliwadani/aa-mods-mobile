@@ -23,7 +23,7 @@ import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useUserData } from "@/contexts/UserDataContext";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { AppIcon } from "@/components/AppIcon";
-import { haptics } from "@/lib/haptics";
+import { haptics, refreshHapticsPreference } from "@/lib/haptics";
 import { logScreenView } from "@/lib/analytics";
 
 const PREFS_KEY = "@aa_mods_prefs_v1";
@@ -360,7 +360,7 @@ export default function SettingsScreen() {
             label="Haptic Feedback"
             sub="Vibration on interactions"
             value={prefs.hapticsEnabled}
-            onToggle={(v) => savePrefs({ hapticsEnabled: v })}
+            onToggle={(v) => { savePrefs({ hapticsEnabled: v }); refreshHapticsPreference(); }}
           />
           <SettingRow
             icon="filter-outline"
@@ -591,7 +591,7 @@ export default function SettingsScreen() {
         <SectionTitle title="About" />
         <View style={[sStyles.aboutCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={sStyles.aboutTop}>
-            <Image source={{ uri: "https://aa-mods.replit.app/logo.png" }} style={sStyles.aboutLogo} contentFit="cover" />
+            <Image source={require("@/assets/images/icon.png")} style={sStyles.aboutLogo} contentFit="cover" />
             <View style={{ flex: 1 }}>
               <Text style={[sStyles.aboutName, { color: colors.foreground }]}>AA Mods Store</Text>
               <Text style={[sStyles.aboutTag, { color: colors.mutedForeground }]}>Safe & stable MOD APK platform</Text>

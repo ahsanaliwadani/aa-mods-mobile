@@ -26,6 +26,7 @@ const IntentLauncher =
     : null;
 
 const INSTALLED_APPS_KEY = "@aa_mods_installed_apps_v1";
+const DOWNLOADS_KEY = "@aa_mods_downloads_v1";
 
 export type DownloadPhase =
   | "idle"
@@ -113,7 +114,36 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         }
       })
       .catch(() => {});
+
+    // Restore persisted completed downloads
+    AsyncStorage.getItem(DOWNLOADS_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const arr = JSON.parse(raw) as DownloadEntry[];
+        if (!Array.isArray(arr) || arr.length === 0) return;
+        setDownloads((prev) => {
+          const next = new Map(prev);
+          for (const entry of arr) {
+            if (entry.slug && (entry.phase === "done" || entry.phase === "error")) {
+              next.set(entry.slug, entry);
+            }
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
   }, []);
+
+  // Persist completed/error downloads whenever they change
+  useEffect(() => {
+    const completed: DownloadEntry[] = [];
+    for (const entry of downloads.values()) {
+      if (entry.phase === "done" || entry.phase === "error") {
+        completed.push(entry);
+      }
+    }
+    AsyncStorage.setItem(DOWNLOADS_KEY, JSON.stringify(completed)).catch(() => {});
+  }, [downloads]);
 
   const updateEntry = useCallback((slug: string, patch: Partial<DownloadEntry>) => {
     setDownloads((prev) => {
@@ -202,7 +232,9 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       try {
         const safeName = appName.replace(/[^a-zA-Z0-9]/g, "_");
         const fileName = `${safeName}_${storeVersion}_${Date.now()}.apk`;
-        const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+        const aaModsDir = `${FileSystem.documentDirectory}AAMods/`;
+        await FileSystem.makeDirectoryAsync(aaModsDir, { intermediates: true }).catch(() => {});
+        const fileUri = `${aaModsDir}${fileName}`;
 
         const downloadResumable = FileSystem.createDownloadResumable(
           resolvedLink,

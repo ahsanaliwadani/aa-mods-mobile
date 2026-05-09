@@ -53,7 +53,7 @@ export default function AboutScreen() {
         {/* Hero */}
         <View style={[aStyles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Image
-            source={{ uri: "https://aa-mods.replit.app/logo.png" }}
+            source={require("@/assets/images/icon.png")}
             style={aStyles.logo}
             contentFit="cover"
           />

@@ -68,6 +68,18 @@ function formatEta(bytesLeft: number, speedBps: number): string {
   return `~${Math.ceil(secs / 60)}m left`;
 }
 
+async function openInBrowser(url: string) {
+  try {
+    await WebBrowser.openBrowserAsync(url, {
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+      toolbarColor: "#0a0a0a",
+      controlsColor: "#00e673",
+    });
+  } catch {
+    await WebBrowser.openBrowserAsync(url).catch(() => {});
+  }
+}
+
 export function DownloadSheet({
   visible,
   link,
@@ -95,10 +107,12 @@ export function DownloadSheet({
   const isDirectOrMediaFire = isMediaFireUrl(link) || !isExternalHost(link);
   const isNonResolvable = isExternalHost(link) && !isMediaFireUrl(link);
 
-  const resetAndClose = useCallback(() => {
-    if (phase === "downloading" || phase === "resolving") return;
+  const isActive = phase === "downloading" || phase === "resolving";
+
+  // Always allow closing — download continues in background
+  const handleMinimize = useCallback(() => {
     onClose();
-  }, [phase, onClose]);
+  }, [onClose]);
 
   const handleStart = async () => {
     if (!link) return;
@@ -106,15 +120,7 @@ export function DownloadSheet({
 
     if (isNonResolvable) {
       onClose();
-      try {
-        await WebBrowser.openBrowserAsync(link, {
-          presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-          toolbarColor: "#0a0a0a",
-          controlsColor: "#00e673",
-        });
-      } catch {
-        await WebBrowser.openBrowserAsync(link).catch(() => {});
-      }
+      await openInBrowser(link);
       return;
     }
 
@@ -130,14 +136,21 @@ export function DownloadSheet({
   };
 
   const handleCancel = async () => {
-    if (phase === "downloading" || phase === "resolving") {
-      if (appSlug) await dm.cancelDownload(appSlug);
+    haptics.medium();
+    if (isActive && appSlug) {
+      await dm.cancelDownload(appSlug);
     }
     onClose();
   };
 
   const handleRetry = async () => {
     if (appSlug) await dm.retryDownload(appSlug);
+  };
+
+  const handleOpenInBrowser = async () => {
+    haptics.light();
+    onClose();
+    await openInBrowser(link);
   };
 
   const bytesLeft = bytesTotal > 0 ? bytesTotal - bytesWritten : 0;
@@ -147,12 +160,22 @@ export function DownloadSheet({
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={resetAndClose}
+      onRequestClose={handleMinimize}
       statusBarTranslucent
     >
-      <Pressable style={styles.overlay} onPress={resetAndClose}>
+      {/* Overlay — tap to minimize, download keeps going */}
+      <Pressable style={styles.overlay} onPress={handleMinimize}>
         <Pressable style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          {/* Handle + minimize row */}
+          <View style={styles.handleRow}>
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+            {isActive && (
+              <Pressable onPress={handleMinimize} style={styles.minimizeBtn} hitSlop={10}>
+                <Ionicons name="chevron-down-circle-outline" size={20} color={colors.mutedForeground} />
+                <Text style={[styles.minimizeText, { color: colors.mutedForeground }]}>Minimize</Text>
+              </Pressable>
+            )}
+          </View>
 
           <View style={styles.appRow}>
             <AppIcon uri={iconUri} slug={appSlug} size={52} borderRadius={14} iconSize={26} />
@@ -176,7 +199,7 @@ export function DownloadSheet({
                   {isNonResolvable
                     ? "Download page will open inside the app — no external browser needed."
                     : isMediaFireUrl(link)
-                    ? "MediaFire link detected — the app will resolve the direct APK link automatically and download in-app."
+                    ? "MediaFire link detected — will resolve direct APK link and download in-app."
                     : "APK will download directly inside the app. Tap Install when done."}
                 </Text>
               </View>
@@ -194,13 +217,16 @@ export function DownloadSheet({
                   color={colors.primaryForeground}
                 />
                 <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>
-                  {isNonResolvable
-                    ? "Open Download Page"
-                    : isMediaFireUrl(link)
-                    ? "Resolve & Download APK"
-                    : "Download APK"}
+                  {isNonResolvable ? "Open Download Page" : isMediaFireUrl(link) ? "Resolve & Download APK" : "Download APK"}
                 </Text>
               </Pressable>
+
+              {isMediaFireUrl(link) && (
+                <Pressable onPress={handleOpenInBrowser} style={[styles.secondaryBtn, { borderColor: colors.border }]}>
+                  <Ionicons name="globe-outline" size={15} color={colors.accent} />
+                  <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>Open in Browser Instead</Text>
+                </Pressable>
+              )}
 
               <Pressable onPress={handleCancel} style={[styles.cancelBtn, { borderColor: colors.border }]}>
                 <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
@@ -210,10 +236,8 @@ export function DownloadSheet({
 
           {phase === "resolving" && (
             <View style={styles.centerArea}>
-              <View style={[styles.resolveRow]}>
-                <View style={[styles.resolveIconBox, { backgroundColor: "rgba(0,230,115,0.1)", borderColor: "rgba(0,230,115,0.25)" }]}>
-                  <Ionicons name="cloud-download-outline" size={28} color={colors.primary} />
-                </View>
+              <View style={[styles.resolveIconBox, { backgroundColor: "rgba(0,230,115,0.1)", borderColor: "rgba(0,230,115,0.25)" }]}>
+                <Ionicons name="cloud-download-outline" size={28} color={colors.primary} />
               </View>
               <Text style={[styles.progressLabel, { color: colors.foreground }]}>
                 Resolving MediaFire Link…
@@ -221,9 +245,16 @@ export function DownloadSheet({
               <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
                 Extracting direct APK download URL
               </Text>
-              <Pressable onPress={handleCancel} style={[styles.cancelBtn, { borderColor: colors.border, marginTop: 8, width: "100%" }]}>
-                <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
-              </Pressable>
+              <View style={styles.rowBtns}>
+                <Pressable onPress={handleMinimize} style={[styles.halfBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+                  <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+                  <Text style={[styles.halfBtnText, { color: colors.mutedForeground }]}>Minimize</Text>
+                </Pressable>
+                <Pressable onPress={handleCancel} style={[styles.halfBtn, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.3)" }]}>
+                  <Ionicons name="stop" size={14} color="#ef4444" />
+                  <Text style={[styles.halfBtnText, { color: "#ef4444" }]}>Cancel</Text>
+                </Pressable>
+              </View>
             </View>
           )}
 
@@ -241,15 +272,7 @@ export function DownloadSheet({
               </View>
 
               <View style={[styles.progressTrack, { backgroundColor: colors.secondary, width: TRACK_WIDTH }]}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: progressWidth,
-                      backgroundColor: colors.primary,
-                    },
-                  ]}
-                />
+                <View style={[styles.progressFill, { width: progressWidth, backgroundColor: colors.primary }]} />
               </View>
 
               <View style={styles.progressMetaRow}>
@@ -258,9 +281,7 @@ export function DownloadSheet({
                     {formatBytes(bytesWritten)} / {formatBytes(bytesTotal)}
                   </Text>
                 ) : (
-                  <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
-                    Please keep the app open
-                  </Text>
+                  <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>Downloading…</Text>
                 )}
                 {bytesLeft > 0 && speedBps > 0 && (
                   <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
@@ -269,9 +290,16 @@ export function DownloadSheet({
                 )}
               </View>
 
-              <Pressable onPress={handleCancel} style={[styles.cancelBtn, { borderColor: colors.border, width: "100%" }]}>
-                <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel Download</Text>
-              </Pressable>
+              <View style={styles.rowBtns}>
+                <Pressable onPress={handleMinimize} style={[styles.halfBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+                  <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+                  <Text style={[styles.halfBtnText, { color: colors.mutedForeground }]}>Minimize</Text>
+                </Pressable>
+                <Pressable onPress={handleCancel} style={[styles.halfBtn, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.3)" }]}>
+                  <Ionicons name="stop" size={14} color="#ef4444" />
+                  <Text style={[styles.halfBtnText, { color: "#ef4444" }]}>Cancel</Text>
+                </Pressable>
+              </View>
             </View>
           )}
 
@@ -285,7 +313,7 @@ export function DownloadSheet({
                 <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
                   {Platform.OS === "android"
                     ? "Tap Install Now to begin installation."
-                    : "APK downloaded. Install it manually from your downloads."}
+                    : "APK downloaded to AAMods folder."}
                 </Text>
               </View>
 
@@ -304,7 +332,7 @@ export function DownloadSheet({
                 </Pressable>
               )}
 
-              <Pressable onPress={resetAndClose} style={[styles.cancelBtn, { borderColor: colors.border }]}>
+              <Pressable onPress={handleMinimize} style={[styles.cancelBtn, { borderColor: colors.border }]}>
                 <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Close</Text>
               </Pressable>
             </>
@@ -315,9 +343,7 @@ export function DownloadSheet({
               <View style={[styles.doneCircle, { backgroundColor: "rgba(0,230,115,0.08)" }]}>
                 <Ionicons name="hardware-chip-outline" size={36} color={colors.primary} />
               </View>
-              <Text style={[styles.progressLabel, { color: colors.foreground }]}>
-                Launching Installer…
-              </Text>
+              <Text style={[styles.progressLabel, { color: colors.foreground }]}>Launching Installer…</Text>
               <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
                 Allow install from unknown sources if prompted
               </Text>
@@ -339,29 +365,33 @@ export function DownloadSheet({
               {apkPath && Platform.OS === "android" && (
                 <Pressable
                   onPress={handleInstall}
-                  style={({ pressed }) => [
-                    styles.primaryBtn,
-                    { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
-                  ]}
+                  style={({ pressed }) => [styles.primaryBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
                 >
                   <Ionicons name="hardware-chip-outline" size={18} color={colors.primaryForeground} />
-                  <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>
-                    Retry Install
-                  </Text>
+                  <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>Retry Install</Text>
                 </Pressable>
               )}
 
               {!apkPath && (
-                <Pressable
-                  onPress={handleRetry}
-                  style={({ pressed }) => [
-                    styles.primaryBtn,
-                    { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
-                  ]}
-                >
-                  <Ionicons name="refresh" size={18} color={colors.primaryForeground} />
-                  <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>Try Again</Text>
-                </Pressable>
+                <>
+                  <Pressable
+                    onPress={handleRetry}
+                    style={({ pressed }) => [styles.primaryBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+                  >
+                    <Ionicons name="refresh" size={18} color={colors.primaryForeground} />
+                    <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>Try Again</Text>
+                  </Pressable>
+
+                  {isMediaFireUrl(link) && (
+                    <Pressable
+                      onPress={handleOpenInBrowser}
+                      style={[styles.secondaryBtn, { borderColor: "rgba(34,211,238,0.4)" }]}
+                    >
+                      <Ionicons name="globe-outline" size={15} color={colors.accent} />
+                      <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>Open MediaFire in Browser</Text>
+                    </Pressable>
+                  )}
+                </>
               )}
 
               <Pressable onPress={() => { dm.clearEntry(appSlug); onClose(); }} style={[styles.cancelBtn, { borderColor: colors.border }]}>
@@ -384,10 +414,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     paddingHorizontal: 20,
     paddingBottom: 44,
-    paddingTop: 12,
+    paddingTop: 8,
     gap: 12,
   },
-  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 8 },
+  handleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+    position: "relative",
+  },
+  handle: { width: 40, height: 4, borderRadius: 2 },
+  minimizeBtn: {
+    position: "absolute",
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    padding: 6,
+  },
+  minimizeText: { fontSize: 12, fontFamily: "Inter_400Regular" },
   appRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 4 },
   appName: { fontSize: 17, fontWeight: "700", fontFamily: "Inter_700Bold" },
   appSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
@@ -412,6 +458,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   primaryBtnText: { fontSize: 16, fontWeight: "800", letterSpacing: 0.3, fontFamily: "Inter_700Bold" },
+  secondaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 12,
+  },
+  secondaryBtnText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   cancelBtn: {
     alignItems: "center",
     justifyContent: "center",
@@ -421,7 +477,6 @@ const styles = StyleSheet.create({
   },
   cancelText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   centerArea: { alignItems: "center", gap: 10, paddingVertical: 10, width: "100%" },
-  resolveRow: { alignItems: "center", marginBottom: 4 },
   resolveIconBox: {
     width: 64,
     height: 64,
@@ -429,7 +484,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
+    marginBottom: 4,
   },
+  rowBtns: { flexDirection: "row", gap: 10, width: "100%", marginTop: 4 },
+  halfBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 11,
+  },
+  halfBtnText: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   progressHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -447,12 +515,7 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingHorizontal: 4,
   },
-  progressSub: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    paddingHorizontal: 4,
-  },
+  progressSub: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 4 },
   doneCircle: {
     width: 72,
     height: 72,
