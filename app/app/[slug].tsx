@@ -1,0 +1,506 @@
+import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import * as Linking from "expo-linking";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { AppIcon } from "@/components/AppIcon";
+import { DownloadSheet, useDownloadSheet } from "@/components/DownloadSheet";
+import { haptics } from "@/lib/haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { useColors } from "@/hooks/useColors";
+import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
+import { useFirebaseAppDetail } from "@/hooks/useFirebaseAppDetail";
+import { useUserData } from "@/contexts/UserDataContext";
+import { logAppDetailView, logFavoriteToggle, logShareApp } from "@/lib/analytics";
+
+function StatCard({ label, value, colors }: { label: string; value: string; colors: ReturnType<typeof useColors> }) {
+  return (
+    <View style={[styles.statCard, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+      <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{label}</Text>
+      <Text style={[styles.statValue, { color: colors.foreground }]} numberOfLines={2} adjustsFontSizeToFit>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+
+function SectionBlock({
+  icon,
+  title,
+  color,
+  bgColor,
+  borderColor,
+  children,
+}: {
+  icon: string;
+  title: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.section, { backgroundColor: bgColor, borderColor }]}>
+      <View style={styles.sectionHeader}>
+        <Ionicons name={icon as "information-circle-outline"} size={16} color={color} />
+        <Text style={[styles.sectionTitle, { color }]}>{title}</Text>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+export default function AppDetailScreen() {
+  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const router = useRouter();
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+
+  const { apps, loading: catalogLoading } = useFirebaseCatalog();
+  const app = apps.find((a) => a.slug === (slug ?? ""));
+  const { detail, loading: detailLoading } = useFirebaseAppDetail(slug ?? "");
+  const { isFavorite, toggleFavorite, addRecentlyViewed } = useUserData();
+  const dlSheet = useDownloadSheet();
+
+  const [showFullChangelog, setShowFullChangelog] = useState(false);
+
+  const topInset = Platform.OS === "web" ? 67 : insets.top;
+  const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
+
+  const isFav = isFavorite(slug ?? "");
+
+  useEffect(() => {
+    if (slug && app) {
+      addRecentlyViewed(slug);
+      logAppDetailView(slug, app.name);
+    }
+  }, [slug, app?.name]);
+
+  const handleFavoriteToggle = () => {
+    if (!slug) return;
+    haptics.medium();
+    const action = isFav ? "remove" : "add";
+    toggleFavorite(slug);
+    if (app) logFavoriteToggle(slug, app.name, action);
+  };
+
+  const handleShare = async () => {
+    try {
+      haptics.light();
+      if (app) logShareApp(slug ?? "", app.name);
+      await Share.share({
+        title: app?.name ?? "AA Mods",
+        message: `Download ${app?.name ?? "this app"} from AA Mods!\nhttps://aa-mods.replit.app/app/${slug}`,
+        url: `https://aa-mods.replit.app/app/${slug}`,
+      });
+    } catch { }
+  };
+
+  if (!app) {
+    const isNotFound = !catalogLoading;
+    return (
+      <View style={[styles.notFoundContainer, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: topInset + 8, borderBottomColor: colors.border, backgroundColor: colors.card }]}>
+          <Pressable testID="back-button" onPress={() => router.back()} style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}>
+            <Ionicons name="chevron-back" size={24} color={colors.foreground} />
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>
+            {isNotFound ? "Not Found" : "Loading…"}
+          </Text>
+          <View style={styles.shareBtn} />
+        </View>
+        <View style={styles.notFoundContent}>
+          {isNotFound ? (
+            <>
+              <Ionicons name="alert-circle-outline" size={52} color={colors.mutedForeground} style={{ opacity: 0.5 }} />
+              <Text style={[styles.notFoundTitle, { color: colors.foreground }]}>App Not Found</Text>
+              <Text style={[styles.notFoundSubtitle, { color: colors.mutedForeground }]}>
+                This app doesn't exist or may have been removed.
+              </Text>
+              <Pressable
+                onPress={() => router.back()}
+                style={({ pressed }) => [styles.notFoundBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+              >
+                <Text style={[styles.notFoundBtnText, { color: colors.primaryForeground }]}>Go Back</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator color={colors.primary} size="large" />
+              <Text style={[styles.notFoundTitle, { color: colors.foreground }]}>Loading…</Text>
+              <Text style={[styles.notFoundSubtitle, { color: colors.mutedForeground }]}>
+                Fetching live data from Firebase
+              </Text>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  const primaryDownloadLink = app.directDownloadLink ?? app.downloadLink ?? "";
+  const hasMultipleDownloads = Array.isArray(app.downloadButtons) && app.downloadButtons.length > 0;
+  const stars = [1, 2, 3, 4, 5];
+  const ratingNum = parseFloat(app.rating);
+
+  const changelog = detail?.changelog ?? app.changelog;
+  const whatsNew = detail?.whatsNew ?? app.whatsNew;
+  const mirrorLinks = detail?.mirrorLinks;
+  const note = detail?.note;
+  const longDescription = detail?.longDescription;
+  const seeMoreMods = detail?.seeMoreMods;
+  const fileSize = detail?.fileSize;
+  const androidReq = detail?.androidRequirement;
+
+  const changelogToShow = showFullChangelog ? changelog : changelog?.slice(0, 4);
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { paddingTop: topInset + 8, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <Pressable
+          testID="back-button"
+          onPress={() => { haptics.selection(); router.back(); }}
+          style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Ionicons name="chevron-back" size={24} color={colors.foreground} />
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>{app.name}</Text>
+          {detailLoading && (
+            <Text style={[styles.syncing, { color: colors.mutedForeground }]}>Syncing…</Text>
+          )}
+        </View>
+        <Pressable
+          testID="favorite-button"
+          onPress={handleFavoriteToggle}
+          style={({ pressed }) => [styles.shareBtn, { opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Ionicons
+            name={isFav ? "heart" : "heart-outline"}
+            size={22}
+            color={isFav ? "#ef4444" : colors.foreground}
+          />
+        </Pressable>
+        <Pressable testID="share-button" onPress={handleShare} style={({ pressed }) => [styles.shareBtn, { opacity: pressed ? 0.7 : 1 }]}>
+          <Feather name="share-2" size={20} color={colors.foreground} />
+        </Pressable>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + 32 }]}>
+
+        {/* Hero */}
+        <View style={[styles.heroSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.heroTop}>
+            <AppIcon uri={app.iconImage} size={80} borderRadius={20} iconSize={40} />
+            <View style={styles.heroInfo}>
+              <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                <View style={[styles.officialBadge, { backgroundColor: "rgba(34,211,238,0.1)", borderColor: "rgba(34,211,238,0.3)" }]}>
+                  <Ionicons name="shield-checkmark" size={11} color={colors.accent} />
+                  <Text style={[styles.officialBadgeText, { color: colors.accent }]}>Official Build</Text>
+                </View>
+                {app.isNew && (
+                  <View style={[styles.officialBadge, { backgroundColor: "rgba(0,230,115,0.12)", borderColor: "rgba(0,230,115,0.3)" }]}>
+                    <Ionicons name="sparkles" size={11} color={colors.primary} />
+                    <Text style={[styles.officialBadgeText, { color: colors.primary }]}>New Update</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.heroAppName, { color: colors.foreground }]}>{app.name}</Text>
+              <Text style={[styles.heroSubtitle, { color: colors.mutedForeground }]} numberOfLines={2}>{app.subtitle}</Text>
+              <View style={styles.starsRow}>
+                {stars.map((s) => (
+                  <Ionicons key={s} name="star" size={14} color={ratingNum >= s ? "#fbbf24" : colors.border} />
+                ))}
+                <Text style={[styles.ratingNum, { color: colors.foreground }]}>{app.rating}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.statsRow, { borderTopColor: colors.border }]}>
+            <StatCard label="VERSION" value={app.version} colors={colors} />
+            <StatCard label="BASE" value={app.baseVersion} colors={colors} />
+            <StatCard label="DOWNLOADS" value={app.downloads} colors={colors} />
+            {fileSize ? (
+              <StatCard label="SIZE" value={fileSize} colors={colors} />
+            ) : (
+              <StatCard label="UPDATED" value={app.updateDate.display || app.updateDate.iso} colors={colors} />
+            )}
+          </View>
+        </View>
+
+        {/* Note / Warning */}
+        {note && (
+          <View style={[styles.section, { backgroundColor: "rgba(251,191,36,0.06)", borderColor: "rgba(251,191,36,0.25)" }]}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="alert-circle-outline" size={16} color="#fbbf24" />
+              <Text style={[styles.sectionTitle, { color: "#fbbf24" }]}>IMPORTANT NOTE</Text>
+            </View>
+            <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>{note}</Text>
+          </View>
+        )}
+
+        {/* What's New */}
+        {whatsNew && whatsNew.length > 0 && (
+          <SectionBlock icon="sparkles-outline" title="WHAT'S NEW" color={colors.primary} bgColor="rgba(0,230,115,0.05)" borderColor="rgba(0,230,115,0.2)">
+            {whatsNew.map((item, i) => (
+              <View key={i} style={styles.listItem}>
+                <View style={[styles.listDot, { backgroundColor: colors.primary }]} />
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
+              </View>
+            ))}
+          </SectionBlock>
+        )}
+
+        {/* About */}
+        <SectionBlock icon="information-circle-outline" title="ABOUT" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+          <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>
+            {longDescription || app.shortDescription}
+          </Text>
+        </SectionBlock>
+
+        {/* Meta chips */}
+        <View style={[styles.metaRow, { gap: 10 }]}>
+          <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
+            <Ionicons name="layers-outline" size={16} color={colors.accent} />
+            <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Category</Text>
+            <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.category}</Text>
+          </View>
+          <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
+            <Ionicons name="person-outline" size={16} color={colors.accent} />
+            <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Developer</Text>
+            <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.developer}</Text>
+          </View>
+        </View>
+
+        {androidReq && (
+          <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Ionicons name="phone-portrait-outline" size={16} color={colors.accent} />
+            <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Min Android</Text>
+            <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{androidReq}</Text>
+          </View>
+        )}
+
+        {/* Changelog */}
+        {changelog && changelog.length > 0 && (
+          <SectionBlock icon="list-outline" title="CHANGELOG" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+            {(changelogToShow ?? []).map((item, i) => (
+              <View key={i} style={styles.listItem}>
+                <Text style={[styles.changeIndex, { color: colors.mutedForeground }]}>{i + 1}.</Text>
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
+              </View>
+            ))}
+            {changelog.length > 4 && (
+              <Pressable
+                onPress={() => setShowFullChangelog(!showFullChangelog)}
+                style={[styles.showMoreBtn, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.showMoreText, { color: colors.accent }]}>
+                  {showFullChangelog ? "Show less" : `Show ${changelog.length - 4} more`}
+                </Text>
+                <Ionicons name={showFullChangelog ? "chevron-up" : "chevron-down"} size={14} color={colors.accent} />
+              </Pressable>
+            )}
+          </SectionBlock>
+        )}
+
+        {/* Downloads */}
+        <View style={styles.downloadSection}>
+          <Text style={[styles.downloadSectionTitle, { color: colors.foreground }]}>Download APK</Text>
+          <Text style={[styles.downloadSectionSubtitle, { color: colors.mutedForeground }]}>
+            Secure download via AA Mods verified link
+          </Text>
+
+          {hasMultipleDownloads ? (
+            <View style={{ gap: 10, marginTop: 12 }}>
+              {app.downloadButtons!.map((btn, idx) => (
+                <Pressable
+                  key={idx}
+                  testID={idx === 0 ? "download-button" : "download-button-secondary"}
+                  onPress={() => dlSheet.open(btn.link, `Download APK — ${btn.label}`)}
+                  style={({ pressed }) =>
+                    idx === 0
+                      ? [styles.primaryDownloadBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]
+                      : [styles.secondaryDownloadBtn, { backgroundColor: "rgba(34,211,238,0.08)", borderColor: "rgba(34,211,238,0.35)", opacity: pressed ? 0.8 : 1 }]
+                  }
+                >
+                  <Ionicons
+                    name="download"
+                    size={idx === 0 ? 20 : 16}
+                    color={idx === 0 ? colors.primaryForeground : colors.accent}
+                  />
+                  <Text style={idx === 0 ? [styles.primaryDownloadText, { color: colors.primaryForeground }] : [styles.secondaryDownloadText, { color: colors.accent }]}>
+                    {`Download APK — ${btn.label}`}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : primaryDownloadLink ? (
+            <Pressable
+              testID="download-button"
+              onPress={() => dlSheet.open(primaryDownloadLink, `Download ${app.name} APK`)}
+              style={({ pressed }) => [
+                styles.primaryDownloadBtn,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
+              ]}
+            >
+              <Ionicons name="download" size={20} color={colors.primaryForeground} />
+              <Text style={[styles.primaryDownloadText, { color: colors.primaryForeground }]}>
+                {`Download ${app.name} APK`}
+              </Text>
+            </Pressable>
+          ) : (
+            <View style={[styles.noDownloadNotice, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+              <Ionicons name="alert-circle-outline" size={18} color={colors.mutedForeground} />
+              <Text style={[styles.noDownloadText, { color: colors.mutedForeground }]}>
+                Download link not available. Check back soon.
+              </Text>
+            </View>
+          )}
+
+          {/* Mirror links */}
+          {mirrorLinks && mirrorLinks.length > 0 && (
+            <View style={{ gap: 8, marginTop: 8 }}>
+              <Text style={[styles.mirrorLabel, { color: colors.mutedForeground }]}>Mirror Links</Text>
+              {mirrorLinks.map((m, i) => (
+                <Pressable
+                  key={i}
+                  onPress={() => dlSheet.open(m.link, m.label)}
+                  style={({ pressed }) => [
+                    styles.secondaryDownloadBtn,
+                    { backgroundColor: "rgba(34,211,238,0.08)", borderColor: "rgba(34,211,238,0.35)", opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <Ionicons name="link-outline" size={16} color={colors.accent} />
+                  <Text style={[styles.secondaryDownloadText, { color: colors.accent }]}>{m.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Support */}
+        {(detail?.telegramGroup || detail?.supportEmail) && (
+          <SectionBlock icon="headset-outline" title="SUPPORT" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+            {detail.telegramGroup && (
+              <Pressable
+                onPress={() => Linking.openURL(detail.telegramGroup!)}
+                style={[styles.supportRow, { borderColor: colors.border }]}
+              >
+                <MaterialCommunityIcons name="send" size={16} color="#2AABEE" />
+                <Text style={[styles.supportText, { color: colors.foreground }]}>Telegram Support Group</Text>
+                <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
+              </Pressable>
+            )}
+            {detail.supportEmail && (
+              <Pressable
+                onPress={() => Linking.openURL(`mailto:${detail.supportEmail}`)}
+                style={[styles.supportRow, { borderColor: colors.border }]}
+              >
+                <Ionicons name="mail-outline" size={16} color={colors.accent} />
+                <Text style={[styles.supportText, { color: colors.foreground }]}>{detail.supportEmail}</Text>
+                <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
+              </Pressable>
+            )}
+          </SectionBlock>
+        )}
+
+        {/* See More Mods */}
+        {seeMoreMods && seeMoreMods.length > 0 && (
+          <SectionBlock icon="apps-outline" title="SEE MORE MODS" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+            <View style={{ gap: 8, marginTop: 4 }}>
+              {seeMoreMods.map((m) => (
+                <Pressable
+                  key={m.slug}
+                  onPress={() => { haptics.selection(); router.push(`/app/${m.slug}`); }}
+                  style={({ pressed }) => [styles.seeMoreRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Ionicons name="cube-outline" size={16} color={colors.primary} />
+                  <Text style={[styles.seeMoreText, { color: colors.foreground }]}>{m.label}</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
+                </Pressable>
+              ))}
+            </View>
+          </SectionBlock>
+        )}
+      </ScrollView>
+
+      <DownloadSheet
+        visible={dlSheet.visible}
+        link={dlSheet.currentLink}
+        label={dlSheet.currentLabel}
+        appName={app.name}
+        iconUri={app.iconImage}
+        onClose={dlSheet.close}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, gap: 8 },
+  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 17, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  syncing: { fontSize: 10, fontFamily: "Inter_400Regular" },
+  shareBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  scrollContent: { padding: 16, gap: 12 },
+  heroSection: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
+  heroTop: { flexDirection: "row", gap: 14, padding: 18, alignItems: "flex-start" },
+  heroIcon: { width: 80, height: 80, borderRadius: 20, borderWidth: 1.5 },
+  heroIconFallback: { width: 80, height: 80, borderRadius: 20, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  heroInfo: { flex: 1, gap: 5 },
+  officialBadge: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
+  officialBadgeText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5, fontFamily: "Inter_700Bold" },
+  heroAppName: { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, fontFamily: "Inter_700Bold" },
+  heroSubtitle: { fontSize: 13, lineHeight: 18, fontFamily: "Inter_400Regular" },
+  starsRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+  ratingNum: { fontSize: 13, fontWeight: "700", marginLeft: 4, fontFamily: "Inter_700Bold" },
+  statsRow: { flexDirection: "row", borderTopWidth: 1 },
+  statCard: { flex: 1, alignItems: "center", padding: 12, gap: 4 },
+  statLabel: { fontSize: 9, fontWeight: "700", letterSpacing: 1.2, fontFamily: "Inter_700Bold" },
+  statValue: { fontSize: 12, fontWeight: "700", textAlign: "center", fontFamily: "Inter_700Bold" },
+  section: { borderRadius: 16, borderWidth: 1, padding: 16 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  sectionTitle: { fontSize: 10, fontWeight: "800", letterSpacing: 1.5, fontFamily: "Inter_700Bold" },
+  sectionBody: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular" },
+  listItem: { flexDirection: "row", gap: 8, marginBottom: 6, alignItems: "flex-start" },
+  listDot: { width: 6, height: 6, borderRadius: 3, marginTop: 8, flexShrink: 0 },
+  changeIndex: { fontSize: 13, fontFamily: "Inter_700Bold", width: 18, flexShrink: 0, marginTop: 3 },
+  showMoreBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderTopWidth: 1, marginTop: 10, paddingTop: 10 },
+  showMoreText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  metaRow: { flexDirection: "row" },
+  metaChip: { borderRadius: 14, borderWidth: 1, padding: 14, alignItems: "center", gap: 4 },
+  metaChipLabel: { fontSize: 9, fontWeight: "700", letterSpacing: 1.2, fontFamily: "Inter_700Bold" },
+  metaChipValue: { fontSize: 13, fontWeight: "600", textAlign: "center", fontFamily: "Inter_600SemiBold" },
+  downloadSection: { gap: 4, marginTop: 4 },
+  downloadSectionTitle: { fontSize: 18, fontWeight: "800", letterSpacing: -0.3, fontFamily: "Inter_700Bold" },
+  downloadSectionSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 4 },
+  primaryDownloadBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 24, marginTop: 8 },
+  primaryDownloadText: { fontSize: 16, fontWeight: "800", letterSpacing: 0.3, fontFamily: "Inter_700Bold" },
+  secondaryDownloadBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 20, borderWidth: 1.5, marginTop: 6 },
+  secondaryDownloadText: { fontSize: 14, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  noDownloadNotice: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, padding: 14, marginTop: 8 },
+  noDownloadText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular" },
+  mirrorLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 0.5, marginTop: 4 },
+  supportRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 10, borderWidth: 1, marginBottom: 6 },
+  supportText: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular" },
+  seeMoreRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 10, borderWidth: 1 },
+  seeMoreText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  notFoundContainer: { flex: 1 },
+  notFoundContent: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 14 },
+  notFoundTitle: { fontSize: 22, fontWeight: "800", fontFamily: "Inter_700Bold", marginTop: 8 },
+  notFoundSubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
+  notFoundBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 36, marginTop: 4 },
+  notFoundBtnText: { fontSize: 15, fontWeight: "700", fontFamily: "Inter_700Bold" },
+});

@@ -1,0 +1,88 @@
+import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
+import { ref, push } from "firebase/database";
+import Constants from "expo-constants";
+import { database } from "@/lib/firebase";
+import { logNotificationPermission } from "@/lib/analytics";
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+export async function setupPushNotifications(): Promise<string | null> {
+  if (Platform.OS === "web") return null;
+
+  try {
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("aa-mods-updates", {
+        name: "App Updates",
+        description: "Notifications for new and updated mods",
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#00e673",
+        sound: "default",
+        enableVibrate: true,
+        showBadge: true,
+      });
+      await Notifications.setNotificationChannelAsync("aa-mods-general", {
+        name: "General",
+        description: "General AA Mods notifications",
+        importance: Notifications.AndroidImportance.DEFAULT,
+        lightColor: "#22d3ee",
+      });
+      await Notifications.setNotificationChannelAsync("aa-mods-critical", {
+        name: "Critical Alerts",
+        description: "Important announcements and mandatory updates",
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 500, 200, 500],
+        lightColor: "#ff4444",
+        sound: "default",
+        enableVibrate: true,
+        showBadge: true,
+      });
+    }
+
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    logNotificationPermission(finalStatus);
+
+    if (finalStatus !== "granted") {
+      console.log("[Notifications] Permission denied by user");
+      return null;
+    }
+
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId ??
+      undefined;
+
+    const token = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined,
+    ).catch(() => null);
+
+    if (token?.data) {
+      const tokenRef = ref(database, "push_tokens");
+      await push(tokenRef, {
+        token: token.data,
+        platform: Platform.OS,
+        registeredAt: new Date().toISOString(),
+      }).catch(() => {});
+      return token.data;
+    }
+  } catch (err) {
+    console.warn("[Notifications] Setup failed:", err);
+  }
+  return null;
+}

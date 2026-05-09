@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "208308827331",
+    "firebase_url": "https://aa-mods-default-rtdb.firebaseio.com",
+    "project_id": "aa-mods",
+    "storage_bucket": "aa-mods.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:208308827331:android:a20b1c534f2b7df892de76",
+        "android_client_info": {
+          "package_name": "com.aa.mods"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "208308827331-vbbdl5i2t4lukqijnmj9o7jv44lsdod4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB42oKwcnidARF1csT-zBGB-1bsvck8A_8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "208308827331-vbbdl5i2t4lukqijnmj9o7jv44lsdod4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
