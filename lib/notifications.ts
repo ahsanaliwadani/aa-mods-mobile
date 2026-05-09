@@ -5,12 +5,13 @@ import { logNotificationPermission } from "@/lib/analytics";
 
 const isExpoGo = Constants.appOwnership === "expo";
 
+// Always show notifications when they arrive, including when app is in foreground
 if (!isExpoGo && Platform.OS !== "web") {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: true,
-      shouldSetBadge: false,
+      shouldSetBadge: true,
       shouldShowBanner: true,
       shouldShowList: true,
     }),
@@ -23,6 +24,7 @@ export async function setupPushNotifications(): Promise<string | null> {
 
   try {
     if (Platform.OS === "android") {
+      // High-priority channel for app updates
       await Notifications.setNotificationChannelAsync("aa-mods-updates", {
         name: "App Updates",
         description: "Notifications for new and updated mods",
@@ -32,15 +34,21 @@ export async function setupPushNotifications(): Promise<string | null> {
         sound: "default",
         enableVibrate: true,
         showBadge: true,
+        bypassDnd: false,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       }).catch(() => {});
 
+      // Default channel for general messages
       await Notifications.setNotificationChannelAsync("aa-mods-general", {
         name: "General",
         description: "General AA Mods notifications",
         importance: Notifications.AndroidImportance.DEFAULT,
         lightColor: "#22d3ee",
+        sound: "default",
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       }).catch(() => {});
 
+      // Max-priority channel for critical alerts
       await Notifications.setNotificationChannelAsync("aa-mods-critical", {
         name: "Critical Alerts",
         description: "Important announcements and mandatory updates",
@@ -50,6 +58,8 @@ export async function setupPushNotifications(): Promise<string | null> {
         sound: "default",
         enableVibrate: true,
         showBadge: true,
+        bypassDnd: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       }).catch(() => {});
     }
 
@@ -57,7 +67,16 @@ export async function setupPushNotifications(): Promise<string | null> {
     let finalStatus = existingStatus;
 
     if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+          allowCriticalAlerts: false,
+          provideAppNotificationSettings: true,
+          allowProvisional: false,
+        },
+      });
       finalStatus = status;
     }
 

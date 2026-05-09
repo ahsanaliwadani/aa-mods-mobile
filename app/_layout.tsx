@@ -33,7 +33,17 @@ const GestureHandlerRootView = _GestureHandlerRootView as unknown as React.Compo
 const isExpoGo = Constants.appOwnership === "expo";
 
 SplashScreen.preventAutoHideAsync();
+
+// Initialize OneSignal early (before any render) for background notification support
 initializeOneSignal();
+
+// Track app insights (web-safe, no-op on unsupported platforms)
+if (Platform.OS !== "web") {
+  try {
+    const { Insights } = require("expo-insights");
+    Insights.record().catch(() => {});
+  } catch {}
+}
 
 if (Platform.OS === "web" && typeof window !== "undefined") {
   window.addEventListener("unhandledrejection", (event) => {
@@ -72,20 +82,24 @@ function RootLayoutNav() {
 
     if (!isExpoGo && Platform.OS !== "web") {
       const Notifications = require("expo-notifications");
+
+      // Set up push notification channels and request permission
       setupPushNotifications().catch(() => {});
 
+      // Log foreground notifications
       notifListener.current = Notifications.addNotificationReceivedListener(
         (n: { request: { content: { title: string } } }) => {
-          console.log("[Notification]", n.request.content.title);
+          console.log("[Notification received]", n.request.content.title);
         },
       );
 
+      // Handle notification tap — deep link into the app
       responseListener.current = Notifications.addNotificationResponseReceivedListener(
         (r: { notification: { request: { content: { data: Record<string, unknown> } } } }) => {
           const data = r.notification.request.content.data;
-          if (typeof data?.url === "string") {
+          if (typeof data?.url === "string" && data.url) {
             Linking.openURL(data.url).catch(() => {});
-          } else if (typeof data?.slug === "string") {
+          } else if (typeof data?.slug === "string" && data.slug) {
             Linking.openURL(`aa-mods:///app/${data.slug}`).catch(() => {});
           }
         },

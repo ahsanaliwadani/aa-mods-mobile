@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
-import { OneSignal, LogLevel, OSNotification } from "react-native-onesignal";
+import * as Linking from "expo-linking";
+import { OneSignal, LogLevel } from "react-native-onesignal";
 
 const APP_ID = "c0dd2a7a-37c7-450e-89a0-08c8ec3f446d";
 
@@ -14,26 +15,27 @@ export function initializeOneSignal(): void {
     OneSignal.Debug.setLogLevel(LogLevel.Warn);
     OneSignal.initialize(APP_ID);
 
+    // Show notifications in foreground correctly
     OneSignal.Notifications.addEventListener("foregroundWillDisplay", (event) => {
-      try {
-        const notif: OSNotification = event.getNotification();
-        const content = notif.body ?? notif.title ?? "";
-        if (content) {
-          event.preventDefault();
-          const stripped = Object.assign({}, notif, {
-            attachments: null,
-            largeIcon: null,
-            bigPicture: null,
-            smallIcon: null,
-          });
-          (stripped as unknown as { display: () => void }).display?.();
-        }
-      } catch {
-        // fallthrough — show original
-      }
+      // Display the notification as-is in the foreground
+      event.getNotification().display();
     });
 
-    OneSignal.Notifications.requestPermission(false);
+    // Handle notification tap — deep link into the app
+    OneSignal.Notifications.addEventListener("click", (event) => {
+      try {
+        const data = event.notification.additionalData as Record<string, unknown> | null;
+        if (!data) return;
+        if (typeof data.url === "string" && data.url) {
+          Linking.openURL(data.url).catch(() => {});
+        } else if (typeof data.slug === "string" && data.slug) {
+          Linking.openURL(`aa-mods:///app/${data.slug}`).catch(() => {});
+        }
+      } catch {}
+    });
+
+    // Proactively prompt for notification permission
+    OneSignal.Notifications.requestPermission(true);
   } catch (err) {
     console.warn("[OneSignal] Initialization error:", err);
   }
@@ -99,5 +101,14 @@ export function removeInAppTrigger(key: string): void {
     OneSignal.InAppMessages.removeTrigger(key);
   } catch (err) {
     console.warn("[OneSignal] removeTrigger error:", err);
+  }
+}
+
+export function setExternalUserId(id: string): void {
+  if (Platform.OS === "web") return;
+  try {
+    OneSignal.login(id);
+  } catch (err) {
+    console.warn("[OneSignal] setExternalUserId error:", err);
   }
 }

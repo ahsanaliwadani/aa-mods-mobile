@@ -29,7 +29,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.aa.mods"
+      "bundleIdentifier": "com.aa.mods",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification", "fetch"]
+      }
     },
     "android": {
       "package": "com.aa.mods",
@@ -47,7 +50,9 @@
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.REQUEST_INSTALL_PACKAGES"
+        "android.permission.REQUEST_INSTALL_PACKAGES",
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE"
       ]
     },
     "web": {
@@ -68,7 +73,8 @@
           "icon": "./assets/images/notification-icon.png",
           "color": "#00e673",
           "defaultChannel": "aa-mods-updates",
-          "sounds": []
+          "sounds": [],
+          "enableBackgroundRemoteNotifications": true
         }
       ],
       [
