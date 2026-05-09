@@ -73,12 +73,13 @@
     ],
     "extra": {
       "eas": {
-        "projectId": ""
+        "projectId": "734dbcb5-e59a-4f2d-afc9-b5596a0a30da"
       }
     },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "owner": "ahsanali12"
   }
 }
