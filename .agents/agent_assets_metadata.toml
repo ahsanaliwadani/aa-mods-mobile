@@ -6,3 +6,9 @@ id = "IY2klNMb_QYXjEnXzh8ZZ"
 uri = "file://aa-mods-admin.zip"
 type = "unspecified"
 title = "AA Mods Admin Panel (standalone HTML)"
+
+[[outputs]]
+id = "PFWSxxAe3Tmx9AnlU7iYg"
+uri = "file://aa-mods-admin-updated.zip"
+type = "unspecified"
+title = "aa-mods-admin-updated.zip"
