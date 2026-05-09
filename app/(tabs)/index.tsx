@@ -429,10 +429,25 @@ export default function HomeScreen() {
     try {
       haptics.light();
       logShareApp(app.slug, app.name);
+      const appLink = `https://aa-mods.replit.app/app/${app.slug}`;
+      const stars = "⭐".repeat(Math.round(parseFloat(app.rating)));
+      const message = [
+        `📱 ${app.name}`,
+        `${stars} ${app.rating} · ${app.category}`,
+        ``,
+        `${app.shortDescription || "Check out this MOD APK on AA Mods Store!"}`,
+        ``,
+        `🔖 Version: v${app.version}  |  📥 ${app.downloads}+ downloads`,
+        ``,
+        `⬇️ Download free on AA Mods Store:`,
+        appLink,
+        ``,
+        `🛡️ 100% safe · verified · no ads`,
+      ].join("\n");
       await Share.share({
-        title: app.name,
-        message: `Download ${app.name} from AA Mods!\nhttps://aa-mods.vercel.app/app/${app.slug}`,
-        url: `https://aa-mods.vercel.app/app/${app.slug}`,
+        title: `${app.name} — Free MOD APK`,
+        message,
+        url: appLink,
       });
     } catch {}
   };

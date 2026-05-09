@@ -113,10 +113,25 @@ export default function AppDetailScreen() {
     try {
       haptics.light();
       if (app) logShareApp(slug ?? "", app.name);
+      const appLink = `https://aa-mods.replit.app/app/${slug}`;
+      const stars = "⭐".repeat(Math.round(parseFloat(app?.rating ?? "5")));
+      const message = [
+        `📱 ${app?.name ?? "AA Mods App"}`,
+        `${stars} ${app?.rating ?? ""} · ${app?.category ?? ""}`,
+        ``,
+        `${app?.shortDescription ?? "Check out this MOD APK on AA Mods Store!"}`,
+        ``,
+        `🔖 Version: v${app?.version ?? ""}  |  📥 ${app?.downloads ?? ""}+ downloads`,
+        ``,
+        `⬇️ Download free on AA Mods Store:`,
+        appLink,
+        ``,
+        `🛡️ 100% safe · verified · no ads`,
+      ].join("\n");
       await Share.share({
-        title: app?.name ?? "AA Mods",
-        message: `Download ${app?.name ?? "this app"} from AA Mods!\nhttps://aa-mods.vercel.app/app/${slug}`,
-        url: `https://aa-mods.vercel.app/app/${slug}`,
+        title: `${app?.name ?? "AA Mods"} — Free MOD APK`,
+        message,
+        url: appLink,
       });
     } catch { }
   };

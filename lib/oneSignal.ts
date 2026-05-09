@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { OneSignal, LogLevel } from "react-native-onesignal";
+import { OneSignal, LogLevel, OSNotification } from "react-native-onesignal";
 
 const APP_ID = "c0dd2a7a-37c7-450e-89a0-08c8ec3f446d";
 
@@ -13,6 +13,26 @@ export function initializeOneSignal(): void {
   try {
     OneSignal.Debug.setLogLevel(LogLevel.Warn);
     OneSignal.initialize(APP_ID);
+
+    OneSignal.Notifications.addEventListener("foregroundWillDisplay", (event) => {
+      try {
+        const notif: OSNotification = event.getNotification();
+        const content = notif.body ?? notif.title ?? "";
+        if (content) {
+          event.preventDefault();
+          const stripped = Object.assign({}, notif, {
+            attachments: null,
+            largeIcon: null,
+            bigPicture: null,
+            smallIcon: null,
+          });
+          (stripped as unknown as { display: () => void }).display?.();
+        }
+      } catch {
+        // fallthrough — show original
+      }
+    });
+
     OneSignal.Notifications.requestPermission(false);
   } catch (err) {
     console.warn("[OneSignal] Initialization error:", err);

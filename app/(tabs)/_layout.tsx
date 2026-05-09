@@ -10,6 +10,7 @@ import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { GlobalDownloadBar } from "@/components/GlobalDownloadBar";
 import { useUpdateNotifications } from "@/hooks/useUpdateNotifications";
+import { useInstalledAppChecker } from "@/hooks/useInstalledAppChecker";
 
 const BlurView = _BlurView as unknown as React.ComponentType<{
   intensity?: number;
@@ -50,10 +51,11 @@ export default function TabLayout() {
   const colors = useColors();
   const isIOS = Platform.OS === "ios";
   const isDark = true;
-  const { newCount } = useFirebaseCatalog();
+  const { newCount, apps } = useFirebaseCatalog();
   const dm = useDownloadManager();
   const router = useRouter();
   useUpdateNotifications();
+  useInstalledAppChecker(apps);
 
   const activeDownloads = Array.from(dm.downloads.values()).filter(
     (e) => e.phase === "downloading" || e.phase === "resolving",

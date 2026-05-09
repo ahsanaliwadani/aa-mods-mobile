@@ -10,6 +10,7 @@ export type AppUpdateInfo = {
   releaseNotes: string;
   mandatory: boolean;
   hasUpdate: boolean;
+  source: "appUpdate" | "remoteConfig";
 };
 
 const CURRENT_VERSION = Constants.expoConfig?.version ?? "1.0.0";
@@ -31,6 +32,7 @@ function compareVersions(a: string, b: string): number {
 
 export function useAppUpdateChecker() {
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [rcUpdateInfo, setRcUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
   const [storageLoaded, setStorageLoaded] = useState(false);
   const isMounted = useRef(true);
@@ -42,6 +44,7 @@ export function useAppUpdateChecker() {
       .finally(() => { if (isMounted.current) setStorageLoaded(true); });
   }, []);
 
+  // Listen to app_config/appUpdate
   useEffect(() => {
     isMounted.current = true;
     let unsubscribe: (() => void) | undefined;
@@ -60,18 +63,12 @@ export function useAppUpdateChecker() {
             const releaseNotes = (data.releaseNotes as string) || "";
             const mandatory = Boolean(data.mandatory);
             const hasUpdate = compareVersions(latestVersion, CURRENT_VERSION) > 0;
-            setUpdateInfo({ latestVersion, downloadUrl, releaseNotes, mandatory, hasUpdate });
-          } catch {
-            // parse error — ignore silently
-          }
+            setUpdateInfo({ latestVersion, downloadUrl, releaseNotes, mandatory, hasUpdate, source: "appUpdate" });
+          } catch {}
         },
-        () => {
-          // Firebase permission denied — no update info available, ignore silently
-        },
+        () => {},
       );
-    } catch {
-      // setup error — ignore silently
-    }
+    } catch {}
 
     return () => {
       isMounted.current = false;
@@ -79,19 +76,63 @@ export function useAppUpdateChecker() {
     };
   }, []);
 
+  // Also listen to app_config/remoteConfig for updateBanner fields as a second source
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    try {
+      const configRef = ref(database, "app_config/remoteConfig");
+      unsubscribe = onValue(
+        configRef,
+        (snapshot) => {
+          if (!isMounted.current) return;
+          try {
+            const data = snapshot.val() as Record<string, unknown> | null;
+            if (!data) return;
+            const bannerVersion = (data.updateBannerVersion as string) || "";
+            const bannerUrl = (data.updateBannerUrl as string) || "";
+            const bannerMsg = (data.updateBannerMessage as string) || "";
+            const bannerMandatory = Boolean(data.updateBannerMandatory);
+            if (bannerVersion) {
+              const hasUpdate = compareVersions(bannerVersion, CURRENT_VERSION) > 0;
+              setRcUpdateInfo({
+                latestVersion: bannerVersion,
+                downloadUrl: bannerUrl,
+                releaseNotes: bannerMsg,
+                mandatory: bannerMandatory,
+                hasUpdate,
+                source: "remoteConfig",
+              });
+            }
+          } catch {}
+        },
+        () => {},
+      );
+    } catch {}
+
+    return () => {
+      try { unsubscribe?.(); } catch {}
+    };
+  }, []);
+
+  const activeInfo = updateInfo?.hasUpdate
+    ? updateInfo
+    : rcUpdateInfo?.hasUpdate
+    ? rcUpdateInfo
+    : null;
+
   const dismiss = (): void => {
-    if (!updateInfo) return;
-    const version = updateInfo.latestVersion;
+    const version = activeInfo?.latestVersion;
+    if (!version) return;
     setDismissedVersion(version);
     AsyncStorage.setItem(DISMISSED_VERSION_KEY, version).catch(() => {});
   };
 
   const shouldShow =
     storageLoaded &&
-    !!updateInfo?.hasUpdate &&
-    dismissedVersion !== updateInfo?.latestVersion;
+    !!activeInfo?.hasUpdate &&
+    dismissedVersion !== activeInfo?.latestVersion;
 
-  const isMandatory = !!updateInfo?.mandatory;
+  const isMandatory = !!activeInfo?.mandatory;
 
-  return { updateInfo, shouldShow, isMandatory, dismiss };
+  return { updateInfo: activeInfo, shouldShow, isMandatory, dismiss };
 }

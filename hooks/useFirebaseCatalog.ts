@@ -10,6 +10,7 @@ export type LiveStoreCatalogApp = StoreCatalogApp & {
   iconOverrideUri?: string;
   changelog?: string[];
   whatsNew?: string[];
+  packageName?: string;
 };
 
 function isNewApp(isoDate: string): boolean {
@@ -91,6 +92,7 @@ function parseFirebaseApp(
       isNew: isNewApp(isoDate),
       changelog: Array.isArray(raw.changelog) ? (raw.changelog as string[]) : undefined,
       whatsNew: Array.isArray(raw.whatsNew) ? (raw.whatsNew as string[]) : undefined,
+      packageName: (raw.packageName as string) || undefined,
     };
   } catch {
     return {

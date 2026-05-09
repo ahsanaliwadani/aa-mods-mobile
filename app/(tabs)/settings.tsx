@@ -28,6 +28,7 @@ import { logScreenView } from "@/lib/analytics";
 
 const PREFS_KEY = "@aa_mods_prefs_v1";
 const SEEN_KEY = "@aa_mods_seen_slugs_v1";
+const AA_MODS_DIR = FileSystem.documentDirectory ? `${FileSystem.documentDirectory}AAMods/` : null;
 
 type SortOption = "newest" | "alphabetical" | "downloads" | "rating";
 
@@ -192,17 +193,29 @@ function prettyUrl(url: string): string {
   try { return url.replace(/^https?:\/\//, "").replace(/\/$/, ""); } catch { return url; }
 }
 
-async function getCacheSize(): Promise<string> {
+async function getDownloadDirSize(): Promise<{ sizeStr: string; bytes: number }> {
   try {
-    if (Platform.OS === "web" || !FileSystem?.cacheDirectory) return "—";
-    const info = await FileSystem.getInfoAsync(FileSystem.cacheDirectory);
-    if (info.exists && "size" in info && typeof info.size === "number") {
-      const mb = info.size / 1024 / 1024;
-      return mb < 1 ? `${(mb * 1024).toFixed(0)} KB` : `${mb.toFixed(1)} MB`;
+    if (Platform.OS === "web" || !AA_MODS_DIR) return { sizeStr: "—", bytes: 0 };
+    const info = await FileSystem.getInfoAsync(AA_MODS_DIR);
+    if (!info.exists) return { sizeStr: "0 KB", bytes: 0 };
+    if ("size" in info && typeof info.size === "number") {
+      const bytes = info.size;
+      const mb = bytes / 1024 / 1024;
+      return { sizeStr: mb < 1 ? `${(mb * 1024).toFixed(0)} KB` : `${mb.toFixed(1)} MB`, bytes };
     }
-    return "—";
-  } catch { return "—"; }
+    return { sizeStr: "—", bytes: 0 };
+  } catch { return { sizeStr: "—", bytes: 0 }; }
 }
+
+const ALL_STORAGE_KEYS = [
+  "@aa_mods_prefs_v1",
+  "@aa_mods_seen_slugs_v1",
+  "@aa_mods_favorites_v2",
+  "@aa_mods_recently_viewed_v2",
+  "@aa_mods_installed_apps_v1",
+  "@aa_mods_downloads_v1",
+  "@aa_mods_dismissed_update_version",
+];
 
 export default function SettingsScreen() {
   const colors = useColors();
@@ -217,8 +230,10 @@ export default function SettingsScreen() {
 
   const [prefs, setPrefs] = useState<UserPrefs>(DEFAULT_PREFS);
   const [cacheSize, setCacheSize] = useState("—");
+  const [cacheBytes, setCacheBytes] = useState(0);
   const [clearingCache, setClearingCache] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [clearingAll, setClearingAll] = useState(false);
 
   useEffect(() => { logScreenView("settings"); }, []);
 
@@ -234,7 +249,7 @@ export default function SettingsScreen() {
       })
       .catch(() => {});
 
-    getCacheSize().then(setCacheSize);
+    getDownloadDirSize().then(({ sizeStr, bytes }) => { setCacheSize(sizeStr); setCacheBytes(bytes); });
 
     if (lastUpdated) {
       setLastChecked(lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
@@ -255,32 +270,85 @@ export default function SettingsScreen() {
     });
   }, []);
 
+  const refreshCacheSize = useCallback(async () => {
+    const { sizeStr, bytes } = await getDownloadDirSize();
+    setCacheSize(sizeStr);
+    setCacheBytes(bytes);
+  }, []);
+
   const clearCache = useCallback(async () => {
     if (Platform.OS === "web") return;
     setClearingCache(true);
     try {
+      // Remove all download entries from state & storage
       const allDownloads = Array.from(dm.downloads.values());
-      const completed = allDownloads.filter((e) => e.phase === "done" || e.phase === "error");
-      for (const entry of completed) {
+      for (const entry of allDownloads) {
         if (entry.apkPath) {
-          try {
-            await FileSystem.deleteAsync(entry.apkPath, { idempotent: true });
-          } catch {}
+          try { await FileSystem.deleteAsync(entry.apkPath, { idempotent: true }); } catch {}
         }
         dm.clearEntry(entry.slug);
       }
-      const newSize = await getCacheSize();
-      setCacheSize(newSize);
+
+      // Delete the entire AAMods directory and recreate it fresh
+      if (AA_MODS_DIR) {
+        const dirInfo = await FileSystem.getInfoAsync(AA_MODS_DIR);
+        if (dirInfo.exists) {
+          await FileSystem.deleteAsync(AA_MODS_DIR, { idempotent: true });
+        }
+        await FileSystem.makeDirectoryAsync(AA_MODS_DIR, { intermediates: true }).catch(() => {});
+      }
+
+      await refreshCacheSize();
+      haptics.success?.() ?? haptics.medium();
+      Alert.alert("Cache Cleared", "All downloaded APK files have been removed.");
+    } catch {
+      Alert.alert("Error", "Could not clear cache. Please try again.");
     } finally {
       setClearingCache(false);
-      haptics.medium();
     }
-  }, [dm]);
+  }, [dm, refreshCacheSize]);
 
   const clearSeenApps = useCallback(async () => {
     await AsyncStorage.removeItem(SEEN_KEY).catch(() => {});
     haptics.medium();
+    Alert.alert("Reset", "Update notifications will re-trigger on next sync.");
   }, []);
+
+  const clearAllData = useCallback(async () => {
+    Alert.alert(
+      "Reset All App Data",
+      "This will clear all favorites, recently viewed, download records, installed records, and preferences. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset Everything",
+          style: "destructive",
+          onPress: async () => {
+            setClearingAll(true);
+            try {
+              // Clear AsyncStorage keys
+              await Promise.all(ALL_STORAGE_KEYS.map((k) => AsyncStorage.removeItem(k).catch(() => {})));
+
+              // Delete downloads folder
+              if (AA_MODS_DIR) {
+                await FileSystem.deleteAsync(AA_MODS_DIR, { idempotent: true }).catch(() => {});
+                await FileSystem.makeDirectoryAsync(AA_MODS_DIR, { intermediates: true }).catch(() => {});
+              }
+
+              clearFavorites();
+              clearRecentlyViewed();
+              setPrefs(DEFAULT_PREFS);
+              await refreshCacheSize();
+              haptics.medium();
+              Alert.alert("Done", "All app data has been reset.");
+            } finally {
+              setClearingAll(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [clearFavorites, clearRecentlyViewed, refreshCacheSize]);
 
   const favoriteApps = favorites
     .map((slug) => apps.find((a) => a.slug === slug))
@@ -412,7 +480,7 @@ export default function SettingsScreen() {
 
       {/* DOWNLOADS */}
       <View style={sStyles.group}>
-        <SectionTitle title="Downloads" />
+        <SectionTitle title="Downloads & Storage" />
         <View style={sStyles.rowGroup}>
           <SettingRow
             icon="wifi-outline"
@@ -423,16 +491,19 @@ export default function SettingsScreen() {
             onToggle={(v) => savePrefs({ wifiOnlyDownloads: v })}
           />
           <SettingRow
-            icon="archive-outline"
-            label="APK Cache Size"
-            sub={clearingCache ? "Clearing…" : cacheSize}
-            onPress={clearCache}
+            icon="folder-outline"
+            iconColor="#f59e0b"
+            label="Download Storage"
+            sub={clearingCache ? "Clearing…" : (cacheBytes > 0 ? `${cacheSize} used · Tap to clear` : cacheSize === "0 KB" ? "No downloads stored" : cacheSize)}
+            onPress={cacheBytes > 0 ? clearCache : undefined}
             disabled={clearingCache}
             trailing={
-              <Text style={[sStyles.actionLink, { color: "#ef4444" }]}>Clear</Text>
+              cacheBytes > 0
+                ? <Text style={[sStyles.actionLink, { color: "#ef4444" }]}>Clear</Text>
+                : <Text style={[sStyles.actionLink, { color: colors.mutedForeground }]}>{cacheSize}</Text>
             }
           />
-          {completedCount > 0 ? (
+          {completedCount > 0 && (
             <SettingRow
               icon="trash-outline"
               label="Clear Completed Downloads"
@@ -440,7 +511,7 @@ export default function SettingsScreen() {
               destructive
               onPress={() => { haptics.medium(); dm.clearAllCompleted(); }}
             />
-          ) : null}
+          )}
         </View>
       </View>
 
@@ -484,7 +555,6 @@ export default function SettingsScreen() {
             disabled={!prefs.showDownloadNotifications}
           />
         </View>
-
       </View>
 
       {/* FAVORITES */}
@@ -621,8 +691,9 @@ export default function SettingsScreen() {
             {[
               { label: "Developer", value: "AA Mods Team" },
               { label: "Platform", value: "Expo React Native" },
-              { label: "Downloads", value: "MediaFire · Direct APK" },
-              { label: "APK Cache", value: cacheSize },
+              { label: "Total Apps", value: `${apps.length} MOD APKs` },
+              { label: "Downloaded Storage", value: cacheSize },
+              { label: "Installed Apps", value: `${installedCount} tracked` },
               { label: "Security", value: "Verified & Safe" },
             ].map(({ label, value }, i, arr) => (
               <View key={label}>
@@ -642,9 +713,9 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* DANGER ZONE */}
+      {/* DATA MANAGEMENT */}
       <View style={sStyles.group}>
-        <SectionTitle title="Data" />
+        <SectionTitle title="Data Management" />
         <View style={sStyles.rowGroup}>
           <SettingRow
             icon="eye-outline"
@@ -653,9 +724,10 @@ export default function SettingsScreen() {
             onPress={clearSeenApps}
             trailing={<Text style={[sStyles.actionLink, { color: colors.accent }]}>Reset</Text>}
           />
-          {installedCount > 0 ? (
+          {installedCount > 0 && (
             <SettingRow
-              icon="trash-outline"
+              icon="phone-portrait-outline"
+              iconColor="#f59e0b"
               label="Clear Installed Records"
               sub={`Remove ${installedCount} installed app record${installedCount !== 1 ? "s" : ""}`}
               destructive
@@ -664,7 +736,15 @@ export default function SettingsScreen() {
                 Object.keys(dm.installedApps).forEach((slug) => dm.clearInstalledApp(slug));
               }}
             />
-          ) : null}
+          )}
+          <SettingRow
+            icon="nuclear-outline"
+            label="Reset All App Data"
+            sub="Clear all data, preferences & downloads"
+            destructive
+            disabled={clearingAll}
+            onPress={clearAllData}
+          />
         </View>
       </View>
     </ScrollView>
@@ -688,37 +768,35 @@ const sStyles = StyleSheet.create({
   action: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   actionLink: { fontSize: 12, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   rowGroup: { gap: 8 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 14 },
+  iconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  rowLabel: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  rowSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  sectionCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 12 },
+  chipSectionLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+  chipText: { fontSize: 12, fontWeight: "700", fontFamily: "Inter_700Bold" },
   liveCard: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 6 },
   liveRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   livePulse: { width: 8, height: 8, borderRadius: 4 },
   liveStatus: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   lastChecked: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  sectionCard: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 12 },
-  chipSectionLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  chipRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 7 },
-  chipText: { fontSize: 12, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 14 },
-  iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  rowLabel: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  rowSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
   appList: { gap: 8 },
   appRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 12 },
   appName: { fontSize: 14, fontWeight: "700", fontFamily: "Inter_700Bold" },
   appMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  emptyCard: { borderRadius: 14, borderWidth: 1, padding: 20, alignItems: "center", gap: 8 },
-  emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 19 },
-  notifInfo: { borderRadius: 12, borderWidth: 1, padding: 12, flexDirection: "row", gap: 8, alignItems: "flex-start", marginTop: 8 },
-  notifInfoText: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, flex: 1 },
+  emptyCard: { borderRadius: 16, borderWidth: 1, padding: 20, alignItems: "center", gap: 8 },
+  emptyText: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center" },
   aboutCard: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
   aboutTop: { flexDirection: "row", gap: 14, padding: 16, alignItems: "flex-start" },
-  aboutLogo: { width: 56, height: 56, borderRadius: 14 },
+  aboutLogo: { width: 54, height: 54, borderRadius: 13 },
   aboutName: { fontSize: 16, fontWeight: "800", fontFamily: "Inter_700Bold" },
-  aboutTag: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2, lineHeight: 17 },
-  badges: { flexDirection: "row", gap: 5, marginTop: 8, flexWrap: "wrap" },
+  aboutTag: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  badges: { flexDirection: "row", gap: 6, marginTop: 8, flexWrap: "wrap" },
   badge: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 6, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 3 },
   badgeText: { fontSize: 10, fontWeight: "700", fontFamily: "Inter_700Bold" },
-  onlineDot: { width: 5, height: 5, borderRadius: 3 },
+  onlineDot: { width: 6, height: 6, borderRadius: 3 },
   divider: { height: 1 },
   infoRows: { paddingHorizontal: 16 },
   infoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 11 },
