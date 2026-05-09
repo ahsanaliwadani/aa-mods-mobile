@@ -21,6 +21,12 @@
     "runtimeVersion": {
       "policy": "appVersion"
     },
+    "notification": {
+      "icon": "./assets/images/notification-icon.png",
+      "color": "#00e673",
+      "androidMode": "default",
+      "androidCollapsedTitle": "AA Mods"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.aa.mods"
@@ -59,15 +65,17 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
+          "icon": "./assets/images/notification-icon.png",
           "color": "#00e673",
-          "defaultChannel": "aa-mods-updates"
+          "defaultChannel": "aa-mods-updates",
+          "sounds": []
         }
       ],
       [
         "onesignal-expo-plugin",
         {
-          "mode": "development"
+          "mode": "development",
+          "smallIcons": ["./assets/images/notification-icon.png"]
         }
       ]
     ],

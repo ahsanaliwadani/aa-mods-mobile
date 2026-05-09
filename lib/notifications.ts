@@ -1,8 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { ref, push } from "firebase/database";
 import Constants from "expo-constants";
-import { database } from "@/lib/firebase";
 import { logNotificationPermission } from "@/lib/analytics";
 
 const isExpoGo = Constants.appOwnership === "expo";
@@ -80,16 +78,7 @@ export async function setupPushNotifications(): Promise<string | null> {
     }
 
     const token = await Notifications.getExpoPushTokenAsync({ projectId }).catch(() => null);
-
-    if (token?.data) {
-      const tokenRef = ref(database, "push_tokens");
-      await push(tokenRef, {
-        token: token.data,
-        platform: Platform.OS,
-        registeredAt: new Date().toISOString(),
-      }).catch(() => {});
-      return token.data;
-    }
+    return token?.data ?? null;
   } catch (err) {
     console.warn("[Notifications] Setup failed:", err);
   }

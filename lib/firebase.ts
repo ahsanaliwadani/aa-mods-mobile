@@ -12,6 +12,6 @@ export const FIREBASE_CONFIG = {
   measurementId: "G-SEFN4WE4PT",
 };
 
-const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApp();
+export const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApp();
 export const database = getDatabase(app);
 export { ref, onValue };

@@ -13,7 +13,7 @@ export function initializeOneSignal(): void {
   try {
     OneSignal.Debug.setLogLevel(LogLevel.Warn);
     OneSignal.initialize(APP_ID);
-    OneSignal.Notifications.requestPermission(true);
+    OneSignal.Notifications.requestPermission(false);
   } catch (err) {
     console.warn("[OneSignal] Initialization error:", err);
   }
