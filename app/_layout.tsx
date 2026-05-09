@@ -100,6 +100,10 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="app/[slug]" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="about" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="privacy" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="terms" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="disclaimer" options={{ headerShown: false, animation: "slide_from_right" }} />
     </Stack>
   );
 }

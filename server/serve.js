@@ -105,6 +105,7 @@ function serveStaticFile(urlPath, res) {
 }
 
 const landingPageTemplate = fs.readFileSync(TEMPLATE_PATH, "utf-8");
+const ADMIN_PANEL_PATH = path.resolve(__dirname, "templates", "admin.html");
 const appName = getAppName();
 
 const server = http.createServer((req, res) => {
@@ -113,6 +114,18 @@ const server = http.createServer((req, res) => {
 
   if (basePath && pathname.startsWith(basePath)) {
     pathname = pathname.slice(basePath.length) || "/";
+  }
+
+  if (pathname === "/admin" || pathname === "/admin/") {
+    if (fs.existsSync(ADMIN_PANEL_PATH)) {
+      const adminHtml = fs.readFileSync(ADMIN_PANEL_PATH);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(adminHtml);
+    } else {
+      res.writeHead(404);
+      res.end("Admin panel not found");
+    }
+    return;
   }
 
   if (pathname === "/" || pathname === "/manifest") {

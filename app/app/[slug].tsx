@@ -101,8 +101,8 @@ export default function AppDetailScreen() {
       if (app) logShareApp(slug ?? "", app.name);
       await Share.share({
         title: app?.name ?? "AA Mods",
-        message: `Download ${app?.name ?? "this app"} from AA Mods!\nhttps://aa-mods.replit.app/app/${slug}`,
-        url: `https://aa-mods.replit.app/app/${slug}`,
+        message: `Download ${app?.name ?? "this app"} from AA Mods!\nhttps://aa-mods.vercel.app/app/${slug}`,
+        url: `https://aa-mods.vercel.app/app/${slug}`,
       });
     } catch { }
   };

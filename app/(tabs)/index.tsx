@@ -394,8 +394,8 @@ export default function HomeScreen() {
       logShareApp(app.slug, app.name);
       await Share.share({
         title: app.name,
-        message: `Download ${app.name} from AA Mods!\nhttps://aa-mods.replit.app/app/${app.slug}`,
-        url: `https://aa-mods.replit.app/app/${app.slug}`,
+        message: `Download ${app.name} from AA Mods!\nhttps://aa-mods.vercel.app/app/${app.slug}`,
+        url: `https://aa-mods.vercel.app/app/${app.slug}`,
       });
     } catch {}
   };

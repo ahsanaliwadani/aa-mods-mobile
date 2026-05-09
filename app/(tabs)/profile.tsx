@@ -230,6 +230,38 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* ── Legal & Info ── */}
+      <View style={{ marginTop: 24 }}>
+        <SectionTitle title="Legal & Info" />
+        <View style={pStyles.linkList}>
+          <LinkRow
+            icon="information-circle-outline"
+            label="About AA Mods"
+            sub="Who we are & what we do"
+            onPress={() => { haptics.selection(); router.push("/about"); }}
+          />
+          <LinkRow
+            icon="lock-closed-outline"
+            label="Privacy Policy"
+            sub="How we handle your data"
+            onPress={() => { haptics.selection(); router.push("/privacy"); }}
+          />
+          <LinkRow
+            icon="document-text-outline"
+            label="Terms of Service"
+            sub="Rules for using AA Mods Store"
+            onPress={() => { haptics.selection(); router.push("/terms"); }}
+          />
+          <LinkRow
+            icon="warning-outline"
+            label="Disclaimer"
+            sub="Important notices & limitations"
+            iconColor="#fbbf24"
+            onPress={() => { haptics.selection(); router.push("/disclaimer"); }}
+          />
+        </View>
+      </View>
+
       {/* ── Beautiful About Card ── */}
       <View style={{ marginTop: 28 }}>
         <SectionTitle title="About AA Mods" />
@@ -237,7 +269,7 @@ export default function ProfileScreen() {
           {/* Brand header */}
           <View style={pStyles.aboutBrand}>
             <Image
-              source={{ uri: "https://aa-mods.replit.app/logo.png" }}
+              source={{ uri: "https://aa-mods.vercel.app/logo.png" }}
               style={pStyles.aboutLogo}
               contentFit="cover"
             />
