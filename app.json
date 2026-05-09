@@ -51,7 +51,7 @@
       [
         "expo-router",
         {
-          "origin": "https://aa-mods.replit.app"
+          "origin": "https://aa-mods.vercel.app"
         }
       ],
       "expo-font",
