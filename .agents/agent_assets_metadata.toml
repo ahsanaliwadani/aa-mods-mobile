@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "IY2klNMb_QYXjEnXzh8ZZ"
+uri = "file://aa-mods-admin.zip"
+type = "unspecified"
+title = "AA Mods Admin Panel (standalone HTML)"

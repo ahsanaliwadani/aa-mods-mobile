@@ -1,3 +1,4 @@
+import "@/lib/webWarnings";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -8,7 +9,6 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
 import Constants from "expo-constants";
 import React, { useEffect, useRef } from "react";
@@ -34,8 +34,6 @@ const isExpoGo = Constants.appOwnership === "expo";
 SplashScreen.preventAutoHideAsync();
 initializeOneSignal();
 
-// Suppress font-loading timeout unhandled rejections on web — these are cosmetic
-// and happen when the Replit sandbox is slow to respond to font requests.
 if (Platform.OS === "web" && typeof window !== "undefined") {
   window.addEventListener("unhandledrejection", (event) => {
     const msg: string = event?.reason?.message ?? "";
@@ -61,29 +59,36 @@ const KeyboardWrapper: React.FC<WrapperProps> =
         );
       })();
 
+type NotifSubscription = { remove: () => void } | null;
+
 function RootLayoutNav() {
-  const notifListener = useRef<Notifications.EventSubscription | null>(null);
-  const responseListener = useRef<Notifications.EventSubscription | null>(null);
+  const notifListener = useRef<NotifSubscription>(null);
+  const responseListener = useRef<NotifSubscription>(null);
   const { config, loaded } = useRemoteConfig();
 
   useEffect(() => {
     logAppOpen();
 
-    if (!isExpoGo) {
+    if (!isExpoGo && Platform.OS !== "web") {
+      const Notifications = require("expo-notifications");
       setupPushNotifications().catch(() => {});
 
-      notifListener.current = Notifications.addNotificationReceivedListener((n) => {
-        console.log("[Notification]", n.request.content.title);
-      });
+      notifListener.current = Notifications.addNotificationReceivedListener(
+        (n: { request: { content: { title: string } } }) => {
+          console.log("[Notification]", n.request.content.title);
+        },
+      );
 
-      responseListener.current = Notifications.addNotificationResponseReceivedListener((r) => {
-        const data = r.notification.request.content.data as Record<string, unknown>;
-        if (typeof data?.url === "string") {
-          Linking.openURL(data.url).catch(() => {});
-        } else if (typeof data?.slug === "string") {
-          Linking.openURL(`aa-mods:///app/${data.slug}`).catch(() => {});
-        }
-      });
+      responseListener.current = Notifications.addNotificationResponseReceivedListener(
+        (r: { notification: { request: { content: { data: Record<string, unknown> } } } }) => {
+          const data = r.notification.request.content.data;
+          if (typeof data?.url === "string") {
+            Linking.openURL(data.url).catch(() => {});
+          } else if (typeof data?.slug === "string") {
+            Linking.openURL(`aa-mods:///app/${data.slug}`).catch(() => {});
+          }
+        },
+      );
     }
 
     return () => {

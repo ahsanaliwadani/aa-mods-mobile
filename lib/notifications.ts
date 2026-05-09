@@ -5,7 +5,7 @@ import { logNotificationPermission } from "@/lib/analytics";
 
 const isExpoGo = Constants.appOwnership === "expo";
 
-if (!isExpoGo) {
+if (!isExpoGo && Platform.OS !== "web") {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
