@@ -5,18 +5,23 @@ import Constants from "expo-constants";
 import { database } from "@/lib/firebase";
 import { logNotificationPermission } from "@/lib/analytics";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+const isExpoGo = Constants.appOwnership === "expo";
+
+if (!isExpoGo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export async function setupPushNotifications(): Promise<string | null> {
   if (Platform.OS === "web") return null;
+  if (isExpoGo) return null;
 
   try {
     if (Platform.OS === "android") {
@@ -70,7 +75,7 @@ export async function setupPushNotifications(): Promise<string | null> {
       undefined;
 
     if (!projectId) {
-      console.warn("[Notifications] No EAS project ID configured — push tokens unavailable until you run: eas init");
+      console.warn("[Notifications] No EAS project ID — run: eas init");
       return null;
     }
 

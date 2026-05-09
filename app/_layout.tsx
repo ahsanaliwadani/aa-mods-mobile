@@ -10,6 +10,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
+import Constants from "expo-constants";
 import React, { useEffect, useRef } from "react";
 import { Platform, View } from "react-native";
 import { GestureHandlerRootView as _GestureHandlerRootView } from "react-native-gesture-handler";
@@ -28,9 +29,10 @@ const GestureHandlerRootView = _GestureHandlerRootView as unknown as React.Compo
   children?: React.ReactNode;
 }>;
 
+const isExpoGo = Constants.appOwnership === "expo";
+
 SplashScreen.preventAutoHideAsync();
 
-// Initialize OneSignal before any rendering
 initializeOneSignal();
 
 const queryClient = new QueryClient({
@@ -61,20 +63,23 @@ function RootLayoutNav() {
 
   useEffect(() => {
     logAppOpen();
-    setupPushNotifications().catch(console.warn);
 
-    notificationListener.current = Notifications.addNotificationReceivedListener((n) => {
-      console.log("[Notification received]", n.request.content.title);
-    });
+    if (!isExpoGo) {
+      setupPushNotifications().catch(() => {});
 
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((r) => {
-      const data = r.notification.request.content.data as Record<string, unknown>;
-      if (data?.url && typeof data.url === "string") {
-        Linking.openURL(data.url).catch(() => {});
-      } else if (data?.slug && typeof data.slug === "string") {
-        Linking.openURL(`aa-mods:///app/${data.slug}`).catch(() => {});
-      }
-    });
+      notificationListener.current = Notifications.addNotificationReceivedListener((n) => {
+        console.log("[Notification received]", n.request.content.title);
+      });
+
+      responseListener.current = Notifications.addNotificationResponseReceivedListener((r) => {
+        const data = r.notification.request.content.data as Record<string, unknown>;
+        if (data?.url && typeof data.url === "string") {
+          Linking.openURL(data.url).catch(() => {});
+        } else if (data?.slug && typeof data.slug === "string") {
+          Linking.openURL(`aa-mods:///app/${data.slug}`).catch(() => {});
+        }
+      });
+    }
 
     return () => {
       notificationListener.current?.remove();
