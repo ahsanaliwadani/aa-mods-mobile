@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog, type LiveStoreCatalogApp } from "@/hooks/useFirebaseCatalog";
 import colors from "@/constants/colors";
+import { logScreenView, logUpdatesFilterChanged, logAppCardPress } from "@/lib/analytics";
 
 const DARK = colors.dark;
 
@@ -132,6 +133,8 @@ export default function UpdatesScreen() {
 
   const { apps, newCount } = useFirebaseCatalog();
 
+  React.useEffect(() => { logScreenView("updates"); }, []);
+
   const sorted = useMemo(
     () =>
       [...apps].sort((a, b) => {
@@ -163,8 +166,9 @@ export default function UpdatesScreen() {
   }, []);
 
   const handlePress = useCallback(
-    (slug: string) => {
+    (slug: string, appName: string) => {
       haptics.light();
+      logAppCardPress(slug, appName);
       router.push(`/app/${slug}`);
     },
     [router],
@@ -204,7 +208,11 @@ export default function UpdatesScreen() {
         {/* Filter chips */}
         <View style={styles.chips}>
           <Pressable
-            onPress={() => { haptics.selection(); setFilter("all"); }}
+            onPress={() => {
+              haptics.selection();
+              setFilter("all");
+              logUpdatesFilterChanged("all", apps.length);
+            }}
             style={[
               styles.chip,
               filter === "all"
@@ -228,7 +236,11 @@ export default function UpdatesScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => { haptics.selection(); setFilter("new"); }}
+            onPress={() => {
+              haptics.selection();
+              setFilter("new");
+              logUpdatesFilterChanged("new", newCount);
+            }}
             style={[
               styles.chip,
               filter === "new"
@@ -270,7 +282,7 @@ export default function UpdatesScreen() {
             );
           }
           return (
-            <UpdateCard app={item.app} onPress={() => handlePress(item.app.slug)} />
+            <UpdateCard app={item.app} onPress={() => handlePress(item.app.slug, item.app.name)} />
           );
         }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: bottomPad }}

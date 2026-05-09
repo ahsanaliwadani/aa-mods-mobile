@@ -14,6 +14,16 @@ import {
   notifyDownloadFinished,
   notifyDownloadFailed,
 } from "@/lib/localNotifications";
+import {
+  logDownloadStarted,
+  logDownloadCompleted,
+  logDownloadFailed,
+  logDownloadCancelled,
+  logDownloadRetried,
+  logMediafireResolved,
+  logApkInstalled,
+} from "@/lib/analytics";
+import { startTrace } from "@/lib/firebasePerformance";
 
 const FileSystem =
   Platform.OS !== "web"
@@ -103,6 +113,12 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   const resumableRefs = useRef<Map<string, FileSystem.DownloadResumable>>(new Map());
   const speedTracker = useRef<Map<string, { lastBytes: number; lastTime: number }>>(new Map());
 
+  // Keep a ref in sync with state to avoid stale closures in callbacks
+  const downloadsRef = useRef<Map<string, DownloadEntry>>(downloads);
+  useEffect(() => {
+    downloadsRef.current = downloads;
+  }, [downloads]);
+
   useEffect(() => {
     AsyncStorage.getItem(INSTALLED_APPS_KEY)
       .then((raw) => {
@@ -115,7 +131,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       })
       .catch(() => {});
 
-    // Restore persisted completed downloads
     AsyncStorage.getItem(DOWNLOADS_KEY)
       .then((raw) => {
         if (!raw) return;
@@ -134,7 +149,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       .catch(() => {});
   }, []);
 
-  // Persist completed/error downloads whenever they change
   useEffect(() => {
     const completed: DownloadEntry[] = [];
     for (const entry of downloads.values()) {
@@ -164,7 +178,8 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       link: string,
       iconUri?: string,
     ) => {
-      const existing = downloads.get(slug);
+      // Use ref to avoid stale closure when checking existing downloads
+      const existing = downloadsRef.current.get(slug);
       if (existing && (existing.phase === "downloading" || existing.phase === "resolving")) return;
 
       const entry: DownloadEntry = {
@@ -191,8 +206,10 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
       let resolvedLink = link;
       let resolvedFromMediaFire = false;
+      let linkType: "direct" | "mediafire" | "mirror" = "direct";
 
       if (isMediaFireUrl(link)) {
+        linkType = "mediafire";
         setDownloads((prev) => {
           const next = new Map(prev);
           const e = next.get(slug);
@@ -200,15 +217,21 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           return next;
         });
 
+        const mfTrace = startTrace("mediafire_resolve");
         const direct = await resolveMediaFireLink(link);
         if (direct) {
           resolvedLink = direct;
           resolvedFromMediaFire = true;
+          mfTrace.stop({ app_slug: slug, success: "true" });
+          logMediafireResolved(slug, 0, true);
         } else {
+          mfTrace.stop({ app_slug: slug, success: "false" });
+          logMediafireResolved(slug, 0, false);
           updateEntry(slug, {
             phase: "error",
             error: "Could not resolve MediaFire link. Check your connection and try again.",
           });
+          logDownloadFailed(slug, appName, "mediafire_resolve_failed");
           return;
         }
       }
@@ -218,14 +241,20 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           phase: "error",
           error: "This link is not a direct APK download. Open it in a browser.",
         });
+        logDownloadFailed(slug, appName, "not_direct_apk_url");
         return;
       }
 
       updateEntry(slug, { phase: "downloading", link: resolvedLink });
       notifyDownloadStarted(appName).catch(() => {});
+      logDownloadStarted(slug, appName, storeVersion, linkType);
+
+      const downloadTrace = startTrace("apk_download");
+      const downloadStartTime = Date.now();
 
       if (!FileSystem) {
         updateEntry(slug, { phase: "error", error: "Downloads are not supported on this platform." });
+        logDownloadFailed(slug, appName, "platform_not_supported");
         return;
       }
 
@@ -254,8 +283,8 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
                 speedBps = (written - tracker.lastBytes) / dt;
                 speedTracker.current.set(slug, { lastBytes: written, lastTime: now });
               } else {
-                const existing2 = downloads.get(slug);
-                speedBps = existing2?.speedBps ?? 0;
+                // Use ref to read current speed without stale closure
+                speedBps = downloadsRef.current.get(slug)?.speedBps ?? 0;
               }
             }
 
@@ -275,38 +304,49 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         speedTracker.current.delete(slug);
 
         if (result?.uri) {
+          const durationMs = Date.now() - downloadStartTime;
+          const fileSizeMb = (downloadsRef.current.get(slug)?.bytesTotal ?? 0) / 1024 / 1024;
+          downloadTrace.stop({ app_slug: slug, success: "true" });
           updateEntry(slug, {
             phase: "done",
             progress: 100,
             apkPath: result.uri,
           });
           notifyDownloadFinished(appName).catch(() => {});
+          logDownloadCompleted(slug, appName, storeVersion, durationMs, fileSizeMb);
         } else {
+          downloadTrace.stop({ app_slug: slug, success: "false" });
           updateEntry(slug, { phase: "error", error: "Download failed. Please try again." });
           notifyDownloadFailed(appName, "Download failed. Please try again.").catch(() => {});
+          logDownloadFailed(slug, appName, "result_missing_uri");
         }
       } catch (e: unknown) {
         resumableRefs.current.delete(slug);
         speedTracker.current.delete(slug);
         const msg = e instanceof Error ? e.message : "Unknown error";
         if (msg.includes("cancelled") || msg.includes("aborted")) {
+          const progressPct = downloadsRef.current.get(slug)?.progress ?? 0;
+          logDownloadCancelled(slug, appName, progressPct);
+          downloadTrace.stop({ app_slug: slug, success: "cancelled" });
           setDownloads((prev) => {
             const next = new Map(prev);
             next.delete(slug);
             return next;
           });
         } else {
+          downloadTrace.stop({ app_slug: slug, success: "false" });
           updateEntry(slug, { phase: "error", error: msg });
           notifyDownloadFailed(appName, msg).catch(() => {});
+          logDownloadFailed(slug, appName, msg.slice(0, 80));
         }
       }
     },
-    [downloads, updateEntry],
+    [updateEntry],
   );
 
   const installApk = useCallback(
     async (slug: string) => {
-      const entry = downloads.get(slug);
+      const entry = downloadsRef.current.get(slug);
       if (!entry?.apkPath || Platform.OS !== "android") return;
 
       updateEntry(slug, { phase: "installing" });
@@ -322,6 +362,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           type: "application/vnd.android.package-archive",
         });
         markInstalled(slug, entry.storeVersion);
+        logApkInstalled(slug, entry.appName, entry.storeVersion);
         setDownloads((prev) => {
           const next = new Map(prev);
           next.delete(slug);
@@ -334,7 +375,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         });
       }
     },
-    [downloads, updateEntry],
+    [updateEntry],
   );
 
   const cancelDownload = useCallback(
@@ -347,6 +388,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         }
       } catch {}
       speedTracker.current.delete(slug);
+      // logDownloadCancelled is handled in the catch branch of startDownload
       setDownloads((prev) => {
         const next = new Map(prev);
         next.delete(slug);
@@ -358,8 +400,9 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
   const retryDownload = useCallback(
     async (slug: string) => {
-      const entry = downloads.get(slug);
+      const entry = downloadsRef.current.get(slug);
       if (!entry) return;
+      logDownloadRetried(slug, entry.appName);
       setDownloads((prev) => {
         const next = new Map(prev);
         next.delete(slug);
@@ -367,7 +410,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       });
       await startDownload(slug, entry.appName, entry.storeVersion, entry.link, entry.iconUri);
     },
-    [downloads, startDownload],
+    [startDownload],
   );
 
   const clearEntry = useCallback((slug: string) => {
@@ -391,8 +434,8 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   }, []);
 
   const getEntry = useCallback(
-    (slug: string) => downloads.get(slug),
-    [downloads],
+    (slug: string) => downloadsRef.current.get(slug),
+    [],
   );
 
   const markInstalled = useCallback((slug: string, version: string) => {

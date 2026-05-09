@@ -35,6 +35,7 @@ import {
   logScreenView,
   logAppCardPress,
   logCategoryFilter,
+  logSortChanged,
   logUpdateBannerShown,
   logUpdateBannerDismissed,
   logUpdateBannerClicked,
@@ -458,7 +459,9 @@ export default function HomeScreen() {
   const handleSortCycle = () => {
     haptics.selection();
     const idx = SORT_OPTIONS.findIndex((s) => s.key === sortKey);
-    setSortKey(SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length].key);
+    const nextSort = SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length];
+    setSortKey(nextSort.key);
+    logSortChanged(nextSort.key);
   };
 
   const handleBannerDismiss = () => {

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { ref, onValue, type DataSnapshot } from "firebase/database";
 import { database } from "@/lib/firebase";
 import { storeApps, storeCategories as defaultCategories, type StoreCatalogApp } from "@/data/storeCatalog";
+import { logCatalogSynced, logCatalogError } from "@/lib/analytics";
+import { startTrace } from "@/lib/firebasePerformance";
 
 const BASE_ICON_URL = "https://aa-mods.vercel.app";
 
@@ -164,9 +166,12 @@ export function useFirebaseCatalog() {
   const [connected, setConnected] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const isMounted = useRef(true);
+  const catalogTrace = useRef(startTrace("catalog_load"));
+  const hasFirstLoad = useRef(false);
 
   useEffect(() => {
     isMounted.current = true;
+    catalogTrace.current = startTrace("catalog_load");
 
     let unsubscribe: (() => void) | undefined;
 
@@ -185,10 +190,17 @@ export function useFirebaseCatalog() {
             setLoading(false);
             setConnected(true);
             setLastUpdated(new Date());
+
+            if (!hasFirstLoad.current) {
+              hasFirstLoad.current = true;
+              catalogTrace.current.stop({ app_count: String(merged.length), source: "firebase" });
+              logCatalogSynced(merged.length, 0, "firebase");
+            }
           } catch (parseError) {
             console.warn("[Firebase] Catalog parse error:", parseError);
             if (isMounted.current) {
               setLoading(false);
+              logCatalogError(parseError instanceof Error ? parseError.message : "parse_error");
             }
           }
         },
@@ -197,6 +209,12 @@ export function useFirebaseCatalog() {
           if (isMounted.current) {
             setLoading(false);
             setConnected(false);
+            if (!hasFirstLoad.current) {
+              hasFirstLoad.current = true;
+              catalogTrace.current.stop({ source: "error" });
+              logCatalogSynced(storeApps.length, 0, "cache");
+            }
+            logCatalogError(error.message);
           }
         },
       );
@@ -205,6 +223,7 @@ export function useFirebaseCatalog() {
       if (isMounted.current) {
         setLoading(false);
         setConnected(false);
+        logCatalogError(setupError instanceof Error ? setupError.message : "setup_error");
       }
     }
 

@@ -24,7 +24,7 @@ import { useUserData } from "@/contexts/UserDataContext";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { AppIcon } from "@/components/AppIcon";
 import { haptics, refreshHapticsPreference } from "@/lib/haptics";
-import { logScreenView } from "@/lib/analytics";
+import { logScreenView, logSettingChanged, logCacheCleared, logAllDataReset, logExternalLinkOpened } from "@/lib/analytics";
 
 const PREFS_KEY = "@aa_mods_prefs_v1";
 const AA_MODS_DIR = FileSystem.documentDirectory ? `${FileSystem.documentDirectory}AAMods/` : null;
@@ -265,6 +265,10 @@ export default function SettingsScreen() {
     setPrefs((prev) => {
       const next = { ...prev, ...update };
       AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next)).catch(() => {});
+      // Log each changed setting
+      for (const [key, value] of Object.entries(update)) {
+        logSettingChanged(key, value as string | boolean);
+      }
       return next;
     });
   }, []);
@@ -296,6 +300,7 @@ export default function SettingsScreen() {
         }
       }
       await refreshCacheSize();
+      logCacheCleared(cacheBytes);
       haptics.medium();
       Alert.alert("Cache Cleared", "All APK files removed from device storage. Your download history is preserved.");
     } catch {
@@ -330,6 +335,7 @@ export default function SettingsScreen() {
               clearRecentlyViewed();
               setPrefs(DEFAULT_PREFS);
               await refreshCacheSize();
+              logAllDataReset();
               haptics.medium();
               Alert.alert("Done", "All app data has been reset.");
             } finally {
@@ -617,21 +623,21 @@ export default function SettingsScreen() {
         <SectionTitle title="Community & Support" />
         <View style={sStyles.rowGroup}>
           {config.telegramUrl ? (
-            <SettingRow icon="paper-plane" iconColor="#2AABEE" label="Telegram Channel" sub={prettyUrl(config.telegramUrl)} onPress={() => openUrl(config.telegramUrl)} />
+            <SettingRow icon="paper-plane" iconColor="#2AABEE" label="Telegram Channel" sub={prettyUrl(config.telegramUrl)} onPress={() => { logExternalLinkOpened("telegram"); openUrl(config.telegramUrl); }} />
           ) : (
-            <SettingRow icon="paper-plane" iconColor="#2AABEE" label="Telegram Channel" sub="Updates & announcements" onPress={() => openUrl("https://t.me/aamods")} />
+            <SettingRow icon="paper-plane" iconColor="#2AABEE" label="Telegram Channel" sub="Updates & announcements" onPress={() => { logExternalLinkOpened("telegram"); openUrl("https://t.me/aamods"); }} />
           )}
           {config.websiteUrl ? (
-            <SettingRow icon="globe-outline" label="AA Mods Website" sub={prettyUrl(config.websiteUrl)} onPress={() => openUrl(config.websiteUrl)} />
+            <SettingRow icon="globe-outline" label="AA Mods Website" sub={prettyUrl(config.websiteUrl)} onPress={() => { logExternalLinkOpened("website"); openUrl(config.websiteUrl); }} />
           ) : null}
           {config.discordUrl ? (
-            <SettingRow icon="logo-discord" iconColor="#5865F2" label="Discord Server" sub={prettyUrl(config.discordUrl)} onPress={() => openUrl(config.discordUrl)} />
+            <SettingRow icon="logo-discord" iconColor="#5865F2" label="Discord Server" sub={prettyUrl(config.discordUrl)} onPress={() => { logExternalLinkOpened("discord"); openUrl(config.discordUrl); }} />
           ) : null}
           {config.instagramUrl ? (
-            <SettingRow icon="logo-instagram" iconColor="#E1306C" label="Instagram" sub={prettyUrl(config.instagramUrl)} onPress={() => openUrl(config.instagramUrl)} />
+            <SettingRow icon="logo-instagram" iconColor="#E1306C" label="Instagram" sub={prettyUrl(config.instagramUrl)} onPress={() => { logExternalLinkOpened("instagram"); openUrl(config.instagramUrl); }} />
           ) : null}
           {config.supportEmail ? (
-            <SettingRow icon="mail-outline" label="Contact Support" sub={config.supportEmail} onPress={() => Linking.openURL(`mailto:${config.supportEmail}`).catch(() => {})} />
+            <SettingRow icon="mail-outline" label="Contact Support" sub={config.supportEmail} onPress={() => { logExternalLinkOpened("support"); Linking.openURL(`mailto:${config.supportEmail}`).catch(() => {}); }} />
           ) : null}
         </View>
       </View>

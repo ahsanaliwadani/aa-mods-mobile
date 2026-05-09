@@ -22,7 +22,7 @@ import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
 import { useFirebaseAppDetail } from "@/hooks/useFirebaseAppDetail";
 import { useUserData } from "@/contexts/UserDataContext";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
-import { logAppDetailView, logFavoriteToggle, logShareApp } from "@/lib/analytics";
+import { logAppDetailView, logFavoriteToggle, logShareApp, logAppNotFound, logChangelogExpanded, logMirrorLinkUsed, logSeeMoreModsPress } from "@/lib/analytics";
 
 function StatCard({ label, value, colors }: { label: string; value: string; colors: ReturnType<typeof useColors> }) {
   return (
@@ -91,7 +91,7 @@ export default function AppDetailScreen() {
   useEffect(() => {
     if (slug && app) {
       addRecentlyViewed(slug);
-      logAppDetailView(slug, app.name);
+      logAppDetailView(slug, app.name, app.category);
     }
   }, [slug, app?.name]);
 
@@ -135,6 +135,12 @@ export default function AppDetailScreen() {
       });
     } catch { }
   };
+
+  useEffect(() => {
+    if (!catalogLoading && !app && slug) {
+      logAppNotFound(slug);
+    }
+  }, [catalogLoading, app, slug]);
 
   if (!app) {
     const isNotFound = !catalogLoading;
@@ -433,7 +439,11 @@ export default function AppDetailScreen() {
             ))}
             {changelog.length > 4 && (
               <Pressable
-                onPress={() => setShowFullChangelog(!showFullChangelog)}
+                onPress={() => {
+                  const next = !showFullChangelog;
+                  setShowFullChangelog(next);
+                  if (next) logChangelogExpanded(slug ?? "", app.name);
+                }}
                 style={[styles.showMoreBtn, { borderColor: colors.border }]}
               >
                 <Text style={[styles.showMoreText, { color: colors.accent }]}>
@@ -576,7 +586,10 @@ export default function AppDetailScreen() {
               {mirrorLinks.map((m, i) => (
                 <Pressable
                   key={i}
-                  onPress={() => handleDownload(m.link, m.label)}
+                  onPress={() => {
+                    logMirrorLinkUsed(slug ?? "", app.name, m.label);
+                    handleDownload(m.link, m.label);
+                  }}
                   style={({ pressed }) => [
                     styles.secondaryDownloadBtn,
                     { backgroundColor: "rgba(34,211,238,0.08)", borderColor: "rgba(34,211,238,0.35)", opacity: pressed ? 0.8 : 1 },
@@ -635,7 +648,11 @@ export default function AppDetailScreen() {
               {seeMoreMods.map((m) => (
                 <Pressable
                   key={m.slug}
-                  onPress={() => { haptics.selection(); router.push(`/app/${m.slug}`); }}
+                  onPress={() => {
+                    haptics.selection();
+                    logSeeMoreModsPress(slug ?? "", m.slug);
+                    router.push(`/app/${m.slug}`);
+                  }}
                   style={({ pressed }) => [styles.seeMoreRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
                 >
                   <Ionicons name="cube-outline" size={16} color={colors.primary} />
