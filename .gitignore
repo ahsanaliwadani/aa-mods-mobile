@@ -40,6 +40,5 @@ yarn-error.*
 
 .env
 attached_assets/
-*.json
-*.txt
-.env
+static-build/
+firebase-database-restore.json
