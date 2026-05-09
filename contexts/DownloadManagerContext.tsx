@@ -9,6 +9,11 @@ import React, {
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { resolveMediaFireLink, isMediaFireUrl, isDirectApkUrl } from "@/lib/mediafireResolver";
+import {
+  notifyDownloadStarted,
+  notifyDownloadFinished,
+  notifyDownloadFailed,
+} from "@/lib/localNotifications";
 
 const FileSystem =
   Platform.OS !== "web"
@@ -185,6 +190,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       }
 
       updateEntry(slug, { phase: "downloading", link: resolvedLink });
+      notifyDownloadStarted(appName).catch(() => {});
 
       if (!FileSystem) {
         updateEntry(slug, { phase: "error", error: "Downloads are not supported on this platform." });
@@ -240,8 +246,10 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
             progress: 100,
             apkPath: result.uri,
           });
+          notifyDownloadFinished(appName).catch(() => {});
         } else {
           updateEntry(slug, { phase: "error", error: "Download failed. Please try again." });
+          notifyDownloadFailed(appName, "Download failed. Please try again.").catch(() => {});
         }
       } catch (e: unknown) {
         resumableRefs.current.delete(slug);
@@ -255,6 +263,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           });
         } else {
           updateEntry(slug, { phase: "error", error: msg });
+          notifyDownloadFailed(appName, msg).catch(() => {});
         }
       }
     },

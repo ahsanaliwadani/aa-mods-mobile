@@ -75,7 +75,11 @@ function parseFirebaseApp(
       rating: (raw.rating as string) || fallback?.rating || "4.8",
       downloads: (raw.downloads as string) || fallback?.downloads || "1K+",
       subtitle: (raw.subtitle as string) || fallback?.subtitle || "",
-      shortDescription: (raw.shortDescription as string) || fallback?.shortDescription || "",
+      shortDescription:
+        (raw.shortDescription as string) ||
+        (raw.description as string) ||
+        fallback?.shortDescription ||
+        "",
       seoKeywords: (raw.seoKeywords as string) || fallback?.seoKeywords || "",
       gradient: fallback?.gradient || "from-slate-900 to-slate-700",
       iconType: fallback?.iconType || "default",

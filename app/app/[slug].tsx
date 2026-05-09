@@ -344,21 +344,6 @@ export default function AppDetailScreen() {
           </View>
         )}
 
-        {/* Long Description / About This Mod */}
-        {(longDescription || app.shortDescription) && (
-          <SectionBlock
-            icon="document-text-outline"
-            title="ABOUT THIS MOD"
-            color={colors.accent}
-            bgColor={colors.card}
-            borderColor={colors.border}
-          >
-            <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>
-              {longDescription || app.shortDescription}
-            </Text>
-          </SectionBlock>
-        )}
-
         {/* What's New */}
         {whatsNew && whatsNew.length > 0 && (
           <SectionBlock icon="sparkles-outline" title="WHAT'S NEW" color={colors.primary} bgColor="rgba(0,230,115,0.05)" borderColor="rgba(0,230,115,0.2)">
@@ -371,11 +356,31 @@ export default function AppDetailScreen() {
           </SectionBlock>
         )}
 
-        {/* About */}
-        <SectionBlock icon="information-circle-outline" title="ABOUT" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
-          <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>
-            {longDescription || app.shortDescription}
-          </Text>
+        {/* About / Long Description */}
+        <SectionBlock
+          icon="document-text-outline"
+          title={longDescription ? "ABOUT THIS MOD" : "DESCRIPTION"}
+          color={colors.accent}
+          bgColor={colors.card}
+          borderColor={colors.border}
+        >
+          {detailLoading && !longDescription ? (
+            <View style={{ gap: 6 }}>
+              {[1, 2, 3].map((i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.shimmerLine,
+                    { backgroundColor: colors.border, width: i === 3 ? "60%" : "100%" },
+                  ]}
+                />
+              ))}
+            </View>
+          ) : (
+            <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>
+              {longDescription || app.shortDescription || "No description available."}
+            </Text>
+          )}
         </SectionBlock>
 
         {/* Meta chips */}
@@ -702,6 +707,7 @@ const styles = StyleSheet.create({
   supportText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
   seeMoreRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderTopWidth: 1, marginTop: 4 },
   seeMoreText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  shimmerLine: { height: 12, borderRadius: 6, marginBottom: 6 },
   notFoundContainer: { flex: 1 },
   notFoundContent: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
   notFoundTitle: { fontSize: 20, fontWeight: "800", fontFamily: "Inter_700Bold" },

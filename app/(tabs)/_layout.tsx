@@ -9,6 +9,7 @@ import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { GlobalDownloadBar } from "@/components/GlobalDownloadBar";
+import { useUpdateNotifications } from "@/hooks/useUpdateNotifications";
 
 const BlurView = _BlurView as unknown as React.ComponentType<{
   intensity?: number;
@@ -52,6 +53,7 @@ export default function TabLayout() {
   const { newCount } = useFirebaseCatalog();
   const dm = useDownloadManager();
   const router = useRouter();
+  useUpdateNotifications();
 
   const activeDownloads = Array.from(dm.downloads.values()).filter(
     (e) => e.phase === "downloading" || e.phase === "resolving",
