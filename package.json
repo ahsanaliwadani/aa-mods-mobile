@@ -60,6 +60,7 @@
   },
   "dependencies": {
     "onesignal-expo-plugin": "^2.5.0",
+    "pnpm": "^11.0.9",
     "react-native-onesignal": "^5.4.5"
   }
 }
