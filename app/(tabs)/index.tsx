@@ -28,6 +28,7 @@ import { useFirebaseCatalog, type LiveStoreCatalogApp } from "@/hooks/useFirebas
 import { useAppUpdateChecker } from "@/hooks/useAppUpdateChecker";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useUserData } from "@/contexts/UserDataContext";
+import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import {
   logScreenView,
@@ -218,17 +219,25 @@ const qaStyles = StyleSheet.create({
 });
 
 const AppCard = React.memo(function AppCard({
-  app, onPress, onLongPress,
+  app, onPress, onLongPress, isInstalled, hasUpdate,
 }: {
   app: LiveStoreCatalogApp;
   onPress: () => void;
   onLongPress: () => void;
+  isInstalled?: boolean;
+  hasUpdate?: boolean;
 }) {
   const colors = useColors();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const onPressIn = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: Platform.OS !== "web", speed: 50 }).start();
   const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: Platform.OS !== "web", speed: 50 }).start();
+
+  const borderColor = hasUpdate
+    ? "rgba(251,191,36,0.4)"
+    : isInstalled
+    ? "rgba(0,230,115,0.3)"
+    : colors.border;
 
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
@@ -239,21 +248,41 @@ const AppCard = React.memo(function AppCard({
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         delayLongPress={400}
-        style={[styles.appCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        style={[styles.appCard, { backgroundColor: colors.card, borderColor }]}
       >
         <View style={styles.appCardHeader}>
           <View style={styles.appIconWrapper}>
             <AppIcon uri={app.iconImage} slug={app.slug} overrideUri={app.iconOverrideUri} size={56} borderRadius={14} />
-            <View style={[styles.verifiedDot, { backgroundColor: colors.primary, borderColor: colors.background }]} />
+            {isInstalled && !hasUpdate && (
+              <View style={[styles.verifiedDot, { backgroundColor: colors.primary, borderColor: colors.background }]} />
+            )}
+            {hasUpdate && (
+              <View style={[styles.verifiedDot, { backgroundColor: "#fbbf24", borderColor: colors.background }]} />
+            )}
+            {!isInstalled && !hasUpdate && (
+              <View style={[styles.verifiedDot, { backgroundColor: colors.primary, borderColor: colors.background }]} />
+            )}
           </View>
           <View style={styles.appCardMeta}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <Text style={[styles.appCategory, { color: colors.accent }]} numberOfLines={1}>
                 {app.category.toUpperCase()}
               </Text>
               {app.isNew && (
                 <View style={styles.newBadge}>
                   <Text style={styles.newBadgeText}>NEW</Text>
+                </View>
+              )}
+              {hasUpdate && (
+                <View style={[styles.newBadge, { backgroundColor: "rgba(251,191,36,0.18)", borderColor: "rgba(251,191,36,0.45)" }]}>
+                  <Ionicons name="arrow-up-circle" size={9} color="#fbbf24" />
+                  <Text style={[styles.newBadgeText, { color: "#fbbf24" }]}>UPDATE</Text>
+                </View>
+              )}
+              {isInstalled && !hasUpdate && (
+                <View style={[styles.newBadge, { backgroundColor: "rgba(0,230,115,0.12)", borderColor: "rgba(0,230,115,0.35)" }]}>
+                  <Ionicons name="checkmark-circle" size={9} color="#00e673" />
+                  <Text style={[styles.newBadgeText, { color: "#00e673" }]}>INSTALLED</Text>
                 </View>
               )}
             </View>
@@ -277,10 +306,17 @@ const AppCard = React.memo(function AppCard({
             <Ionicons name="time-outline" size={12} color={colors.mutedForeground} />
             <Text style={[styles.footerStatText, { color: colors.mutedForeground }]}>{app.updateDate.display || app.updateDate.iso}</Text>
           </View>
-          <View style={[styles.versionBadge, { backgroundColor: "rgba(0,230,115,0.1)", borderColor: "rgba(0,230,115,0.25)" }]}>
-            <Ionicons name="checkmark-circle" size={11} color="#00e673" />
-            <Text style={[styles.versionText, { color: "#00e673" }]}>v{app.version}</Text>
-          </View>
+          {hasUpdate ? (
+            <View style={[styles.versionBadge, { backgroundColor: "rgba(251,191,36,0.12)", borderColor: "rgba(251,191,36,0.35)" }]}>
+              <Ionicons name="arrow-up-circle" size={11} color="#fbbf24" />
+              <Text style={[styles.versionText, { color: "#fbbf24" }]}>v{app.version}</Text>
+            </View>
+          ) : (
+            <View style={[styles.versionBadge, { backgroundColor: "rgba(0,230,115,0.1)", borderColor: "rgba(0,230,115,0.25)" }]}>
+              <Ionicons name="checkmark-circle" size={11} color="#00e673" />
+              <Text style={[styles.versionText, { color: "#00e673" }]}>v{app.version}</Text>
+            </View>
+          )}
         </View>
       </Pressable>
     </Animated.View>
@@ -316,6 +352,7 @@ export default function HomeScreen() {
   const { updateInfo, shouldShow, isMandatory, dismiss } = useAppUpdateChecker();
   const { config } = useRemoteConfig();
   const { isFavorite, toggleFavorite } = useUserData();
+  const dm = useDownloadManager();
 
   const effectiveMandatory = isMandatory || config.updateBannerMandatory;
   const shouldShowBanner = shouldShow && config.updateBannerEnabled;
@@ -461,13 +498,19 @@ export default function HomeScreen() {
       <FlatList
         data={filteredApps}
         keyExtractor={(item) => item.slug}
-        renderItem={({ item }) => (
-          <AppCard
-            app={item}
-            onPress={() => handleAppPress(item)}
-            onLongPress={() => handleAppLongPress(item)}
-          />
-        )}
+        renderItem={({ item }) => {
+          const installed = dm.isInstalled(item.slug);
+          const update = dm.hasUpdate(item.slug, item.version);
+          return (
+            <AppCard
+              app={item}
+              onPress={() => handleAppPress(item)}
+              onLongPress={() => handleAppLongPress(item)}
+              isInstalled={installed}
+              hasUpdate={update}
+            />
+          );
+        }}
         contentContainerStyle={[styles.listContent, { paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -600,7 +643,7 @@ const styles = StyleSheet.create({
   verifiedDot: { position: "absolute", bottom: -2, right: -2, width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
   appCardMeta: { flex: 1, gap: 2 },
   appCategory: { fontSize: 9, fontWeight: "800", letterSpacing: 1.5, fontFamily: "Inter_700Bold" },
-  newBadge: { backgroundColor: "#00e673", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  newBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#00e673", borderRadius: 4, borderWidth: 1, borderColor: "transparent", paddingHorizontal: 5, paddingVertical: 1 },
   newBadgeText: { color: "#04131b", fontSize: 8, fontWeight: "800", fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
   appName: { fontSize: 16, fontWeight: "800", letterSpacing: -0.3, fontFamily: "Inter_700Bold" },
   appDeveloper: { fontSize: 12, fontFamily: "Inter_400Regular" },

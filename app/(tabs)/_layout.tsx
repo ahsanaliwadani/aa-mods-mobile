@@ -1,5 +1,5 @@
 import { BlurView as _BlurView } from "expo-blur";
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View, Text } from "react-native";
@@ -7,6 +7,7 @@ import type { StyleProp, ViewStyle } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
+import { GlobalDownloadBar } from "@/components/GlobalDownloadBar";
 
 const BlurView = _BlurView as unknown as React.ComponentType<{
   intensity?: number;
@@ -49,86 +50,96 @@ export default function TabLayout() {
   const isIOS = Platform.OS === "ios";
   const isDark = true;
   const { newCount } = useFirebaseCatalog();
+  const router = useRouter();
+
+  const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 56;
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarStyle: {
-          position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.card,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          elevation: 0,
-          height: Platform.OS === "web" ? 84 : undefined,
-        },
-        tabBarBackground: () =>
-          isIOS ? (
-            <BlurView
-              intensity={80}
-              tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : (
-            <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]}
-            />
-          ),
-        tabBarLabelStyle: {
-          fontFamily: "Inter_600SemiBold",
-          fontSize: 11,
-        },
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "home" : "home-outline"} size={22} color={color} />
-          ),
+    <View style={{ flex: 1 }}>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.mutedForeground,
+          tabBarStyle: {
+            position: "absolute",
+            backgroundColor: isIOS ? "transparent" : colors.card,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            elevation: 0,
+            height: Platform.OS === "web" ? 84 : undefined,
+          },
+          tabBarBackground: () =>
+            isIOS ? (
+              <BlurView
+                intensity={80}
+                tint={isDark ? "dark" : "light"}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : (
+              <View
+                style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]}
+              />
+            ),
+          tabBarLabelStyle: {
+            fontFamily: "Inter_600SemiBold",
+            fontSize: 11,
+          },
         }}
-      />
-      <Tabs.Screen
-        name="updates"
-        options={{
-          title: "Updates",
-          tabBarIcon: ({ color, focused }) => (
-            <View>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Home",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? "home" : "home-outline"} size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="updates"
+          options={{
+            title: "Updates",
+            tabBarIcon: ({ color, focused }) => (
+              <View>
+                <Ionicons
+                  name={focused ? "refresh-circle" : "refresh-circle-outline"}
+                  size={24}
+                  color={color}
+                />
+                <NewBadge count={newCount} />
+              </View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="search"
+          options={{
+            title: "Search",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? "search" : "search-outline"} size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "For You",
+            tabBarIcon: ({ color, focused }) => (
               <Ionicons
-                name={focused ? "refresh-circle" : "refresh-circle-outline"}
+                name={focused ? "person-circle" : "person-circle-outline"}
                 size={24}
                 color={color}
               />
-              <NewBadge count={newCount} />
-            </View>
-          ),
-        }}
+            ),
+          }}
+        />
+      </Tabs>
+
+      <GlobalDownloadBar
+        tabBarHeight={TAB_BAR_HEIGHT}
+        onEntryPress={(slug) => router.push(`/app/${slug}`)}
       />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: "Search",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "search" : "search-outline"} size={22} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "For You",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "person-circle" : "person-circle-outline"}
-              size={24}
-              color={color}
-            />
-          ),
-        }}
-      />
-    </Tabs>
+    </View>
   );
 }

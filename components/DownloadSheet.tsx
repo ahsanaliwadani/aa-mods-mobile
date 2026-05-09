@@ -1,10 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as FileSystem from "expo-file-system";
-import * as IntentLauncher from "expo-intent-launcher";
 import * as WebBrowser from "expo-web-browser";
-import React, { useState, useCallback, useRef } from "react";
+import React, { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   Modal,
@@ -18,27 +15,12 @@ import {
 import { AppIcon } from "@/components/AppIcon";
 import { haptics } from "@/lib/haptics";
 import { useColors } from "@/hooks/useColors";
+import { useDownloadManager } from "@/contexts/DownloadManagerContext";
+import { isExternalHost, isMediaFireUrl } from "@/lib/mediafireResolver";
 
-type DownloadState = "idle" | "downloading" | "done" | "error" | "installing";
+export { isDirectApkUrl } from "@/lib/mediafireResolver";
 
 const TRACK_WIDTH = Dimensions.get("window").width - 80;
-
-function isDirectApkUrl(url: string): boolean {
-  try {
-    const lower = url.toLowerCase();
-    if (lower.includes("mediafire.com")) return false;
-    if (lower.includes("mega.nz")) return false;
-    if (lower.includes("drive.google.com")) return false;
-    if (lower.includes("dropbox.com")) return false;
-    if (lower.includes("1drv.ms") || lower.includes("onedrive.live.com")) return false;
-    if (lower.endsWith(".apk")) return true;
-    if (lower.includes("/download/") && lower.includes(".apk")) return true;
-    if (lower.startsWith("https://download.")) return true;
-    return false;
-  } catch {
-    return false;
-  }
-}
 
 export function useDownloadSheet() {
   const [visible, setVisible] = useState(false);
@@ -62,44 +44,68 @@ type Props = {
   label: string;
   appName: string;
   appSlug?: string;
+  appVersion?: string;
   iconUri?: string;
   onClose: () => void;
 };
 
-export function DownloadSheet({ visible, link, label, appName, appSlug, iconUri, onClose }: Props) {
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "";
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatSpeed(bps: number): string {
+  if (bps <= 0) return "";
+  if (bps < 1024 * 1024) return `${(bps / 1024).toFixed(0)} KB/s`;
+  return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
+function formatEta(bytesLeft: number, speedBps: number): string {
+  if (speedBps <= 0 || bytesLeft <= 0) return "";
+  const secs = Math.ceil(bytesLeft / speedBps);
+  if (secs < 60) return `~${secs}s left`;
+  return `~${Math.ceil(secs / 60)}m left`;
+}
+
+export function DownloadSheet({
+  visible,
+  link,
+  label,
+  appName,
+  appSlug = "",
+  appVersion = "1.0",
+  iconUri,
+  onClose,
+}: Props) {
   const colors = useColors();
-  const [state, setState] = useState<DownloadState>("idle");
-  const [progress, setProgress] = useState(0);
-  const [apkPath, setApkPath] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState("");
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const dm = useDownloadManager();
+  const entry = appSlug ? dm.getEntry(appSlug) : undefined;
 
-  const isDirect = isDirectApkUrl(link);
+  const phase = entry?.phase ?? "idle";
+  const progress = entry?.progress ?? 0;
+  const bytesWritten = entry?.bytesWritten ?? 0;
+  const bytesTotal = entry?.bytesTotal ?? 0;
+  const speedBps = entry?.speedBps ?? 0;
+  const errorMsg = entry?.error ?? "";
+  const apkPath = entry?.apkPath;
 
-  const animateProgress = (pct: number) => {
-    Animated.timing(progressAnim, {
-      toValue: (TRACK_WIDTH * pct) / 100,
-      duration: 120,
-      useNativeDriver: false,
-    }).start();
-  };
+  const progressWidth = Math.max(0, Math.min(TRACK_WIDTH, (TRACK_WIDTH * progress) / 100));
+
+  const isDirectOrMediaFire = isMediaFireUrl(link) || !isExternalHost(link);
+  const isNonResolvable = isExternalHost(link) && !isMediaFireUrl(link);
 
   const resetAndClose = useCallback(() => {
-    if (state === "downloading") return;
-    setState("idle");
-    setProgress(0);
-    setApkPath(null);
-    setErrorMsg("");
-    progressAnim.setValue(0);
+    if (phase === "downloading" || phase === "resolving") return;
     onClose();
-  }, [state, onClose, progressAnim]);
+  }, [phase, onClose]);
 
-  const startDownload = async () => {
+  const handleStart = async () => {
     if (!link) return;
     haptics.medium();
 
-    if (!isDirect) {
-      resetAndClose();
+    if (isNonResolvable) {
+      onClose();
       try {
         await WebBrowser.openBrowserAsync(link, {
           presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
@@ -112,74 +118,29 @@ export function DownloadSheet({ visible, link, label, appName, appSlug, iconUri,
       return;
     }
 
-    setState("downloading");
-    setProgress(0);
-    progressAnim.setValue(0);
-
-    try {
-      const safeName = appName.replace(/[^a-zA-Z0-9]/g, "_");
-      const fileName = `${safeName}_${Date.now()}.apk`;
-      const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
-
-      const downloadResumable = FileSystem.createDownloadResumable(
-        link,
-        fileUri,
-        {},
-        (downloadProgress) => {
-          const total = downloadProgress.totalBytesExpectedToWrite;
-          const written = downloadProgress.totalBytesWritten;
-          if (total > 0) {
-            const pct = Math.min(99, Math.round((written / total) * 100));
-            setProgress(pct);
-            animateProgress(pct);
-          }
-        },
-      );
-
-      const result = await downloadResumable.downloadAsync();
-
-      if (result?.uri) {
-        setApkPath(result.uri);
-        setProgress(100);
-        animateProgress(100);
-        setState("done");
-        haptics.medium();
-      } else {
-        setState("error");
-        setErrorMsg("Download failed. Try again.");
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Unknown error occurred.";
-      setState("error");
-      setErrorMsg(msg);
-    }
+    if (!appSlug) return;
+    await dm.startDownload(appSlug, appName, appVersion, link, iconUri);
   };
 
-  const installApk = async () => {
-    if (!apkPath || Platform.OS !== "android") return;
+  const handleInstall = async () => {
+    if (!appSlug) return;
     haptics.medium();
-    setState("installing");
-    try {
-      const contentUri = await FileSystem.getContentUriAsync(apkPath);
-      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
-        data: contentUri,
-        flags: 1,
-        type: "application/vnd.android.package-archive",
-      });
-      resetAndClose();
-    } catch {
-      setState("error");
-      setErrorMsg("Could not launch installer. Allow 'Install unknown apps' in Settings → Apps.");
-    }
+    await dm.installApk(appSlug);
+    onClose();
   };
 
-  const retry = () => {
-    setState("idle");
-    setProgress(0);
-    setApkPath(null);
-    setErrorMsg("");
-    progressAnim.setValue(0);
+  const handleCancel = async () => {
+    if (phase === "downloading" || phase === "resolving") {
+      if (appSlug) await dm.cancelDownload(appSlug);
+    }
+    onClose();
   };
+
+  const handleRetry = async () => {
+    if (appSlug) await dm.retryDownload(appSlug);
+  };
+
+  const bytesLeft = bytesTotal > 0 ? bytesTotal - bytesWritten : 0;
 
   return (
     <Modal
@@ -196,62 +157,125 @@ export function DownloadSheet({ visible, link, label, appName, appSlug, iconUri,
           <View style={styles.appRow}>
             <AppIcon uri={iconUri} slug={appSlug} size={52} borderRadius={14} iconSize={26} />
             <View style={{ flex: 1, gap: 2 }}>
-              <Text style={[styles.appName, { color: colors.foreground }]} numberOfLines={1}>{appName}</Text>
+              <Text style={[styles.appName, { color: colors.foreground }]} numberOfLines={1}>
+                {appName}
+              </Text>
               <Text style={[styles.appSub, { color: colors.mutedForeground }]}>{label}</Text>
             </View>
           </View>
 
-          {state === "idle" && (
+          {phase === "idle" && (
             <>
               <View style={[styles.infoBox, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
                 <Ionicons
-                  name={isDirect ? "cloud-download-outline" : "globe-outline"}
+                  name={isNonResolvable ? "globe-outline" : isMediaFireUrl(link) ? "cloud-download-outline" : "download-outline"}
                   size={16}
                   color={colors.primary}
                 />
                 <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-                  {isDirect
-                    ? "APK will download directly inside the app. Tap Install when done."
-                    : "Download page will open inside the app — no external browser needed."}
+                  {isNonResolvable
+                    ? "Download page will open inside the app — no external browser needed."
+                    : isMediaFireUrl(link)
+                    ? "MediaFire link detected — the app will resolve the direct APK link automatically and download in-app."
+                    : "APK will download directly inside the app. Tap Install when done."}
                 </Text>
               </View>
 
               <Pressable
-                onPress={startDownload}
+                onPress={handleStart}
                 style={({ pressed }) => [
                   styles.primaryBtn,
                   { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
                 ]}
               >
-                <Ionicons name={isDirect ? "download" : "open-outline"} size={20} color={colors.primaryForeground} />
+                <Ionicons
+                  name={isNonResolvable ? "open-outline" : "download"}
+                  size={20}
+                  color={colors.primaryForeground}
+                />
                 <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>
-                  {isDirect ? "Download APK" : "Open Download Page"}
+                  {isNonResolvable
+                    ? "Open Download Page"
+                    : isMediaFireUrl(link)
+                    ? "Resolve & Download APK"
+                    : "Download APK"}
                 </Text>
               </Pressable>
 
-              <Pressable onPress={resetAndClose} style={[styles.cancelBtn, { borderColor: colors.border }]}>
+              <Pressable onPress={handleCancel} style={[styles.cancelBtn, { borderColor: colors.border }]}>
                 <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
               </Pressable>
             </>
           )}
 
-          {state === "downloading" && (
+          {phase === "resolving" && (
             <View style={styles.centerArea}>
-              <Text style={[styles.progressLabel, { color: colors.foreground }]}>
-                Downloading… {progress}%
-              </Text>
-              <View style={[styles.progressTrack, { backgroundColor: colors.secondary, width: TRACK_WIDTH }]}>
-                <Animated.View
-                  style={[styles.progressFill, { width: progressAnim, backgroundColor: colors.primary }]}
-                />
+              <View style={[styles.resolveRow]}>
+                <View style={[styles.resolveIconBox, { backgroundColor: "rgba(0,230,115,0.1)", borderColor: "rgba(0,230,115,0.25)" }]}>
+                  <Ionicons name="cloud-download-outline" size={28} color={colors.primary} />
+                </View>
               </View>
-              <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
-                Please keep the app open
+              <Text style={[styles.progressLabel, { color: colors.foreground }]}>
+                Resolving MediaFire Link…
               </Text>
+              <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
+                Extracting direct APK download URL
+              </Text>
+              <Pressable onPress={handleCancel} style={[styles.cancelBtn, { borderColor: colors.border, marginTop: 8, width: "100%" }]}>
+                <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </Pressable>
             </View>
           )}
 
-          {state === "done" && (
+          {phase === "downloading" && (
+            <View style={styles.centerArea}>
+              <View style={styles.progressHeaderRow}>
+                <Text style={[styles.progressLabel, { color: colors.foreground }]}>
+                  Downloading… {progress}%
+                </Text>
+                {speedBps > 0 && (
+                  <Text style={[styles.speedText, { color: colors.primary }]}>
+                    {formatSpeed(speedBps)}
+                  </Text>
+                )}
+              </View>
+
+              <View style={[styles.progressTrack, { backgroundColor: colors.secondary, width: TRACK_WIDTH }]}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: progressWidth,
+                      backgroundColor: colors.primary,
+                    },
+                  ]}
+                />
+              </View>
+
+              <View style={styles.progressMetaRow}>
+                {bytesTotal > 0 ? (
+                  <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
+                    {formatBytes(bytesWritten)} / {formatBytes(bytesTotal)}
+                  </Text>
+                ) : (
+                  <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
+                    Please keep the app open
+                  </Text>
+                )}
+                {bytesLeft > 0 && speedBps > 0 && (
+                  <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
+                    {formatEta(bytesLeft, speedBps)}
+                  </Text>
+                )}
+              </View>
+
+              <Pressable onPress={handleCancel} style={[styles.cancelBtn, { borderColor: colors.border, width: "100%" }]}>
+                <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel Download</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {phase === "done" && (
             <>
               <View style={styles.centerArea}>
                 <View style={[styles.doneCircle, { backgroundColor: "rgba(0,230,115,0.12)" }]}>
@@ -267,7 +291,7 @@ export function DownloadSheet({ visible, link, label, appName, appSlug, iconUri,
 
               {Platform.OS === "android" && (
                 <Pressable
-                  onPress={installApk}
+                  onPress={handleInstall}
                   style={({ pressed }) => [
                     styles.primaryBtn,
                     { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
@@ -286,35 +310,61 @@ export function DownloadSheet({ visible, link, label, appName, appSlug, iconUri,
             </>
           )}
 
-          {state === "installing" && (
+          {phase === "installing" && (
             <View style={styles.centerArea}>
-              <ActivityIndicator color={colors.primary} size="large" />
-              <Text style={[styles.progressLabel, { color: colors.foreground }]}>Launching installer…</Text>
+              <View style={[styles.doneCircle, { backgroundColor: "rgba(0,230,115,0.08)" }]}>
+                <Ionicons name="hardware-chip-outline" size={36} color={colors.primary} />
+              </View>
+              <Text style={[styles.progressLabel, { color: colors.foreground }]}>
+                Launching Installer…
+              </Text>
+              <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
+                Allow install from unknown sources if prompted
+              </Text>
             </View>
           )}
 
-          {state === "error" && (
+          {phase === "error" && (
             <>
               <View style={styles.centerArea}>
                 <View style={[styles.doneCircle, { backgroundColor: "rgba(239,68,68,0.12)" }]}>
                   <Ionicons name="alert-circle" size={40} color="#ef4444" />
                 </View>
-                <Text style={[styles.doneTitle, { color: "#ef4444" }]}>Download Failed</Text>
+                <Text style={[styles.doneTitle, { color: "#ef4444" }]}>
+                  {apkPath ? "Install Failed" : "Download Failed"}
+                </Text>
                 <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>{errorMsg}</Text>
               </View>
 
-              <Pressable
-                onPress={retry}
-                style={({ pressed }) => [
-                  styles.primaryBtn,
-                  { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
-                ]}
-              >
-                <Ionicons name="refresh" size={18} color={colors.primaryForeground} />
-                <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>Try Again</Text>
-              </Pressable>
+              {apkPath && Platform.OS === "android" && (
+                <Pressable
+                  onPress={handleInstall}
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+                  ]}
+                >
+                  <Ionicons name="hardware-chip-outline" size={18} color={colors.primaryForeground} />
+                  <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>
+                    Retry Install
+                  </Text>
+                </Pressable>
+              )}
 
-              <Pressable onPress={resetAndClose} style={[styles.cancelBtn, { borderColor: colors.border }]}>
+              {!apkPath && (
+                <Pressable
+                  onPress={handleRetry}
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+                  ]}
+                >
+                  <Ionicons name="refresh" size={18} color={colors.primaryForeground} />
+                  <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>Try Again</Text>
+                </Pressable>
+              )}
+
+              <Pressable onPress={() => { dm.clearEntry(appSlug); onClose(); }} style={[styles.cancelBtn, { borderColor: colors.border }]}>
                 <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
               </Pressable>
             </>
@@ -333,7 +383,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderBottomWidth: 0,
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 44,
     paddingTop: 12,
     gap: 12,
   },
@@ -341,7 +391,15 @@ const styles = StyleSheet.create({
   appRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 4 },
   appName: { fontSize: 17, fontWeight: "700", fontFamily: "Inter_700Bold" },
   appSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
-  infoBox: { flexDirection: "row", alignItems: "flex-start", gap: 10, borderRadius: 14, borderWidth: 1, padding: 14, marginTop: 4 },
+  infoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginTop: 4,
+  },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
   primaryBtn: {
     flexDirection: "row",
@@ -354,13 +412,54 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   primaryBtnText: { fontSize: 16, fontWeight: "800", letterSpacing: 0.3, fontFamily: "Inter_700Bold" },
-  cancelBtn: { alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: 1, paddingVertical: 13 },
+  cancelBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 13,
+  },
   cancelText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  centerArea: { alignItems: "center", gap: 10, paddingVertical: 16 },
+  centerArea: { alignItems: "center", gap: 10, paddingVertical: 10, width: "100%" },
+  resolveRow: { alignItems: "center", marginBottom: 4 },
+  resolveIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  progressHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    paddingHorizontal: 4,
+  },
   progressLabel: { fontSize: 16, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  speedText: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold" },
   progressTrack: { height: 8, borderRadius: 4, overflow: "hidden", marginVertical: 4 },
   progressFill: { height: "100%", borderRadius: 4 },
-  progressSub: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 16 },
-  doneCircle: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  progressMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    paddingHorizontal: 4,
+  },
+  progressSub: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    paddingHorizontal: 4,
+  },
+  doneCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
   doneTitle: { fontSize: 18, fontWeight: "800", fontFamily: "Inter_700Bold" },
 });

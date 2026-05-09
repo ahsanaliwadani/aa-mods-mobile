@@ -19,6 +19,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { UserDataProvider } from "@/contexts/UserDataContext";
+import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
 import { setupPushNotifications } from "@/lib/notifications";
 import { logAppOpen } from "@/lib/analytics";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
@@ -133,13 +134,15 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <UserDataProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardWrapper>
-                <RootLayoutNav />
-              </KeyboardWrapper>
-            </GestureHandlerRootView>
-          </UserDataProvider>
+          <DownloadManagerProvider>
+            <UserDataProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <KeyboardWrapper>
+                  <RootLayoutNav />
+                </KeyboardWrapper>
+              </GestureHandlerRootView>
+            </UserDataProvider>
+          </DownloadManagerProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>

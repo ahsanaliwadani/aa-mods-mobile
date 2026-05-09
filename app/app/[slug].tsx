@@ -21,6 +21,7 @@ import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
 import { useFirebaseAppDetail } from "@/hooks/useFirebaseAppDetail";
 import { useUserData } from "@/contexts/UserDataContext";
+import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { logAppDetailView, logFavoriteToggle, logShareApp } from "@/lib/analytics";
 
 function StatCard({ label, value, colors }: { label: string; value: string; colors: ReturnType<typeof useColors> }) {
@@ -33,7 +34,6 @@ function StatCard({ label, value, colors }: { label: string; value: string; colo
     </View>
   );
 }
-
 
 function SectionBlock({
   icon,
@@ -71,6 +71,7 @@ export default function AppDetailScreen() {
   const app = apps.find((a) => a.slug === (slug ?? ""));
   const { detail, loading: detailLoading } = useFirebaseAppDetail(slug ?? "");
   const { isFavorite, toggleFavorite, addRecentlyViewed } = useUserData();
+  const dm = useDownloadManager();
   const dlSheet = useDownloadSheet();
 
   const [showFullChangelog, setShowFullChangelog] = useState(false);
@@ -80,12 +81,25 @@ export default function AppDetailScreen() {
 
   const isFav = isFavorite(slug ?? "");
 
+  const activeEntry = slug ? dm.getEntry(slug) : undefined;
+  const isDownloading = activeEntry?.phase === "downloading" || activeEntry?.phase === "resolving";
+  const downloadDone = activeEntry?.phase === "done";
+  const installedVersion = slug ? dm.getInstalledVersion(slug) : null;
+  const isInstalled = slug ? dm.isInstalled(slug) : false;
+  const hasUpdate = slug && app ? dm.hasUpdate(slug, app.version) : false;
+
   useEffect(() => {
     if (slug && app) {
       addRecentlyViewed(slug);
       logAppDetailView(slug, app.name);
     }
   }, [slug, app?.name]);
+
+  useEffect(() => {
+    if (downloadDone && slug && !dlSheet.visible) {
+      dlSheet.open(activeEntry?.link ?? "", `Download ${app?.name ?? ""} APK`);
+    }
+  }, [downloadDone]);
 
   const handleFavoriteToggle = () => {
     if (!slug) return;
@@ -165,6 +179,11 @@ export default function AppDetailScreen() {
 
   const changelogToShow = showFullChangelog ? changelog : changelog?.slice(0, 4);
 
+  const handleDownload = (link: string, label: string) => {
+    haptics.medium();
+    dlSheet.open(link, label);
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topInset + 8, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -202,7 +221,14 @@ export default function AppDetailScreen() {
         {/* Hero */}
         <View style={[styles.heroSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.heroTop}>
-            <AppIcon uri={app.iconImage} slug={app.slug} overrideUri={app.iconOverrideUri} size={80} borderRadius={20} iconSize={40} />
+            <View>
+              <AppIcon uri={app.iconImage} slug={app.slug} overrideUri={app.iconOverrideUri} size={80} borderRadius={20} iconSize={40} />
+              {isInstalled && (
+                <View style={styles.installedDot}>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                </View>
+              )}
+            </View>
             <View style={styles.heroInfo}>
               <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
                 <View style={[styles.officialBadge, { backgroundColor: "rgba(34,211,238,0.1)", borderColor: "rgba(34,211,238,0.3)" }]}>
@@ -213,6 +239,18 @@ export default function AppDetailScreen() {
                   <View style={[styles.officialBadge, { backgroundColor: "rgba(0,230,115,0.12)", borderColor: "rgba(0,230,115,0.3)" }]}>
                     <Ionicons name="sparkles" size={11} color={colors.primary} />
                     <Text style={[styles.officialBadgeText, { color: colors.primary }]}>New Update</Text>
+                  </View>
+                )}
+                {isInstalled && !hasUpdate && (
+                  <View style={[styles.officialBadge, { backgroundColor: "rgba(0,230,115,0.12)", borderColor: "rgba(0,230,115,0.3)" }]}>
+                    <Ionicons name="checkmark-circle" size={11} color={colors.primary} />
+                    <Text style={[styles.officialBadgeText, { color: colors.primary }]}>Installed</Text>
+                  </View>
+                )}
+                {hasUpdate && (
+                  <View style={[styles.officialBadge, { backgroundColor: "rgba(251,191,36,0.12)", borderColor: "rgba(251,191,36,0.35)" }]}>
+                    <Ionicons name="arrow-up-circle" size={11} color="#fbbf24" />
+                    <Text style={[styles.officialBadgeText, { color: "#fbbf24" }]}>Update Available</Text>
                   </View>
                 )}
               </View>
@@ -227,6 +265,34 @@ export default function AppDetailScreen() {
             </View>
           </View>
 
+          {/* Installed status banner */}
+          {isInstalled && (
+            <View style={[styles.installedBanner, {
+              backgroundColor: hasUpdate ? "rgba(251,191,36,0.06)" : "rgba(0,230,115,0.05)",
+              borderTopColor: hasUpdate ? "rgba(251,191,36,0.2)" : "rgba(0,230,115,0.2)",
+            }]}>
+              <Ionicons
+                name={hasUpdate ? "arrow-up-circle-outline" : "checkmark-circle-outline"}
+                size={14}
+                color={hasUpdate ? "#fbbf24" : colors.primary}
+              />
+              <Text style={[styles.installedBannerText, { color: hasUpdate ? "#fbbf24" : colors.primary }]}>
+                {hasUpdate
+                  ? `Installed v${installedVersion} — v${app.version} available`
+                  : `Installed v${installedVersion} — up to date`}
+              </Text>
+              {isInstalled && (
+                <Pressable
+                  onPress={() => { if (slug) dm.clearInstalledApp(slug); }}
+                  hitSlop={8}
+                  style={{ marginLeft: "auto" }}
+                >
+                  <Text style={[styles.clearInstalledText, { color: colors.mutedForeground }]}>Clear</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
           <View style={[styles.statsRow, { borderTopColor: colors.border }]}>
             <StatCard label="VERSION" value={app.version} colors={colors} />
             <StatCard label="BASE" value={app.baseVersion} colors={colors} />
@@ -238,6 +304,34 @@ export default function AppDetailScreen() {
             )}
           </View>
         </View>
+
+        {/* Active download progress card */}
+        {activeEntry && (activeEntry.phase === "downloading" || activeEntry.phase === "resolving") && (
+          <View style={[styles.activeDownloadCard, { backgroundColor: "rgba(0,230,115,0.05)", borderColor: "rgba(0,230,115,0.25)" }]}>
+            <View style={styles.activeDownloadHeader}>
+              <Ionicons name="download" size={14} color={colors.primary} />
+              <Text style={[styles.activeDownloadTitle, { color: colors.primary }]}>
+                {activeEntry.phase === "resolving" ? "Resolving download link…" : `Downloading… ${activeEntry.progress}%`}
+              </Text>
+              <Pressable
+                onPress={() => { if (slug) dm.cancelDownload(slug); }}
+                hitSlop={8}
+                style={{ marginLeft: "auto" }}
+              >
+                <Text style={[styles.clearInstalledText, { color: "#ef4444" }]}>Cancel</Text>
+              </Pressable>
+            </View>
+            <View style={[styles.activeProgressTrack, { backgroundColor: "rgba(0,230,115,0.12)" }]}>
+              <View style={[styles.activeProgressFill, { backgroundColor: colors.primary, width: `${activeEntry.progress}%` }]} />
+            </View>
+            {activeEntry.bytesTotal > 0 && (
+              <Text style={[styles.activeDownloadMeta, { color: colors.mutedForeground }]}>
+                {`${(activeEntry.bytesWritten / 1024 / 1024).toFixed(1)} MB / ${(activeEntry.bytesTotal / 1024 / 1024).toFixed(1)} MB`}
+                {activeEntry.speedBps > 0 ? ` · ${(activeEntry.speedBps / 1024 / 1024).toFixed(1)} MB/s` : ""}
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Note / Warning */}
         {note && (
@@ -316,9 +410,15 @@ export default function AppDetailScreen() {
 
         {/* Downloads */}
         <View style={styles.downloadSection}>
-          <Text style={[styles.downloadSectionTitle, { color: colors.foreground }]}>Download APK</Text>
+          <Text style={[styles.downloadSectionTitle, { color: colors.foreground }]}>
+            {hasUpdate ? "Update APK" : isInstalled ? "Reinstall APK" : "Download APK"}
+          </Text>
           <Text style={[styles.downloadSectionSubtitle, { color: colors.mutedForeground }]}>
-            Secure download via AA Mods verified link
+            {hasUpdate
+              ? `Update from v${installedVersion} to v${app.version}`
+              : isInstalled
+              ? `v${installedVersion} installed — re-download latest`
+              : "Secure download via AA Mods verified link"}
           </Text>
 
           {hasMultipleDownloads ? (
@@ -327,38 +427,82 @@ export default function AppDetailScreen() {
                 <Pressable
                   key={idx}
                   testID={idx === 0 ? "download-button" : "download-button-secondary"}
-                  onPress={() => dlSheet.open(btn.link, `Download APK — ${btn.label}`)}
+                  onPress={() => handleDownload(btn.link, `Download APK — ${btn.label}`)}
                   style={({ pressed }) =>
                     idx === 0
-                      ? [styles.primaryDownloadBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]
+                      ? [styles.primaryDownloadBtn, {
+                          backgroundColor: hasUpdate ? "#fbbf24" : colors.primary,
+                          opacity: pressed ? 0.85 : 1,
+                          transform: [{ scale: pressed ? 0.98 : 1 }],
+                        }]
                       : [styles.secondaryDownloadBtn, { backgroundColor: "rgba(34,211,238,0.08)", borderColor: "rgba(34,211,238,0.35)", opacity: pressed ? 0.8 : 1 }]
                   }
                 >
                   <Ionicons
-                    name="download"
+                    name={hasUpdate ? "arrow-up-circle" : "download"}
                     size={idx === 0 ? 20 : 16}
-                    color={idx === 0 ? colors.primaryForeground : colors.accent}
+                    color={idx === 0 ? (hasUpdate ? "#000" : colors.primaryForeground) : colors.accent}
                   />
-                  <Text style={idx === 0 ? [styles.primaryDownloadText, { color: colors.primaryForeground }] : [styles.secondaryDownloadText, { color: colors.accent }]}>
-                    {`Download APK — ${btn.label}`}
+                  <Text style={idx === 0
+                    ? [styles.primaryDownloadText, { color: hasUpdate ? "#000" : colors.primaryForeground }]
+                    : [styles.secondaryDownloadText, { color: colors.accent }]}>
+                    {idx === 0
+                      ? (hasUpdate ? `Update to v${app.version}` : `Download APK — ${btn.label}`)
+                      : `Download APK — ${btn.label}`}
                   </Text>
                 </Pressable>
               ))}
             </View>
           ) : primaryDownloadLink ? (
-            <Pressable
-              testID="download-button"
-              onPress={() => dlSheet.open(primaryDownloadLink, `Download ${app.name} APK`)}
-              style={({ pressed }) => [
-                styles.primaryDownloadBtn,
-                { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
-              ]}
-            >
-              <Ionicons name="download" size={20} color={colors.primaryForeground} />
-              <Text style={[styles.primaryDownloadText, { color: colors.primaryForeground }]}>
-                {`Download ${app.name} APK`}
-              </Text>
-            </Pressable>
+            <View style={{ gap: 10, marginTop: 12 }}>
+              {isDownloading ? (
+                <View style={[styles.primaryDownloadBtn, { backgroundColor: colors.secondary, borderColor: colors.border, borderWidth: 1 }]}>
+                  <ActivityIndicator color={colors.primary} size="small" />
+                  <Text style={[styles.primaryDownloadText, { color: colors.mutedForeground }]}>
+                    {activeEntry?.phase === "resolving" ? "Resolving link…" : `Downloading ${activeEntry?.progress ?? 0}%`}
+                  </Text>
+                </View>
+              ) : downloadDone ? (
+                <Pressable
+                  onPress={() => dlSheet.open(primaryDownloadLink, `Download ${app.name} APK`)}
+                  style={({ pressed }) => [
+                    styles.primaryDownloadBtn,
+                    { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
+                  ]}
+                >
+                  <Ionicons name="hardware-chip-outline" size={20} color={colors.primaryForeground} />
+                  <Text style={[styles.primaryDownloadText, { color: colors.primaryForeground }]}>
+                    Install Now
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  testID="download-button"
+                  onPress={() => handleDownload(primaryDownloadLink, `Download ${app.name} APK`)}
+                  style={({ pressed }) => [
+                    styles.primaryDownloadBtn,
+                    {
+                      backgroundColor: hasUpdate ? "#fbbf24" : colors.primary,
+                      opacity: pressed ? 0.85 : 1,
+                      transform: [{ scale: pressed ? 0.98 : 1 }],
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={hasUpdate ? "arrow-up-circle" : isInstalled ? "refresh-circle" : "download"}
+                    size={20}
+                    color={hasUpdate ? "#000" : colors.primaryForeground}
+                  />
+                  <Text style={[styles.primaryDownloadText, { color: hasUpdate ? "#000" : colors.primaryForeground }]}>
+                    {hasUpdate
+                      ? `Update to v${app.version}`
+                      : isInstalled
+                      ? `Reinstall v${app.version}`
+                      : `Download ${app.name} APK`}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           ) : (
             <View style={[styles.noDownloadNotice, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
               <Ionicons name="alert-circle-outline" size={18} color={colors.mutedForeground} />
@@ -375,7 +519,7 @@ export default function AppDetailScreen() {
               {mirrorLinks.map((m, i) => (
                 <Pressable
                   key={i}
-                  onPress={() => dlSheet.open(m.link, m.label)}
+                  onPress={() => handleDownload(m.link, m.label)}
                   style={({ pressed }) => [
                     styles.secondaryDownloadBtn,
                     { backgroundColor: "rgba(34,211,238,0.08)", borderColor: "rgba(34,211,238,0.35)", opacity: pressed ? 0.8 : 1 },
@@ -442,6 +586,7 @@ export default function AppDetailScreen() {
         appName={app.name}
         iconUri={app.iconImage}
         appSlug={app.slug}
+        appVersion={app.version}
         onClose={dlSheet.close}
       />
     </View>
@@ -458,8 +603,35 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16, gap: 12 },
   heroSection: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
   heroTop: { flexDirection: "row", gap: 14, padding: 18, alignItems: "flex-start" },
-  heroIcon: { width: 80, height: 80, borderRadius: 20, borderWidth: 1.5 },
-  heroIconFallback: { width: 80, height: 80, borderRadius: 20, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  heroIconWrapper: { position: "relative" },
+  installedDot: {
+    position: "absolute",
+    bottom: -4,
+    right: -4,
+    backgroundColor: "#04131b",
+    borderRadius: 10,
+  },
+  installedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+  },
+  installedBannerText: { fontSize: 12, fontWeight: "600", fontFamily: "Inter_600SemiBold", flex: 1 },
+  clearInstalledText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  activeDownloadCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    gap: 8,
+  },
+  activeDownloadHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  activeDownloadTitle: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold", flex: 1 },
+  activeProgressTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
+  activeProgressFill: { height: "100%", borderRadius: 3 },
+  activeDownloadMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
   heroInfo: { flex: 1, gap: 5 },
   officialBadge: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
   officialBadgeText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.5, fontFamily: "Inter_700Bold" },
@@ -487,21 +659,38 @@ const styles = StyleSheet.create({
   downloadSection: { gap: 4, marginTop: 4 },
   downloadSectionTitle: { fontSize: 18, fontWeight: "800", letterSpacing: -0.3, fontFamily: "Inter_700Bold" },
   downloadSectionSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginBottom: 4 },
-  primaryDownloadBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 24, marginTop: 8 },
-  primaryDownloadText: { fontSize: 16, fontWeight: "800", letterSpacing: 0.3, fontFamily: "Inter_700Bold" },
-  secondaryDownloadBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 20, borderWidth: 1.5, marginTop: 6 },
-  secondaryDownloadText: { fontSize: 14, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  primaryDownloadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  primaryDownloadText: { fontSize: 16, fontWeight: "800", fontFamily: "Inter_700Bold" },
+  secondaryDownloadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+  },
+  secondaryDownloadText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   noDownloadNotice: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, padding: 14, marginTop: 8 },
   noDownloadText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular" },
-  mirrorLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 0.5, marginTop: 4 },
-  supportRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 10, borderWidth: 1, marginBottom: 6 },
-  supportText: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular" },
-  seeMoreRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 10, borderWidth: 1 },
+  mirrorLabel: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold", marginTop: 4 },
+  supportRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderTopWidth: 1, marginTop: 6 },
+  supportText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  seeMoreRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderTopWidth: 1, marginTop: 4 },
   seeMoreText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
   notFoundContainer: { flex: 1 },
-  notFoundContent: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 14 },
-  notFoundTitle: { fontSize: 22, fontWeight: "800", fontFamily: "Inter_700Bold", marginTop: 8 },
+  notFoundContent: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
+  notFoundTitle: { fontSize: 20, fontWeight: "800", fontFamily: "Inter_700Bold" },
   notFoundSubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
-  notFoundBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 36, marginTop: 4 },
+  notFoundBtn: { borderRadius: 14, paddingVertical: 13, paddingHorizontal: 28, marginTop: 8 },
   notFoundBtnText: { fontSize: 15, fontWeight: "700", fontFamily: "Inter_700Bold" },
 });
