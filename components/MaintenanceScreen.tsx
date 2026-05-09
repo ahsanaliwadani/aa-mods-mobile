@@ -16,8 +16,8 @@ export function MaintenanceScreen({ message }: Props) {
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1200, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.6, duration: 1200, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 1200, useNativeDriver: Platform.OS !== "web" }),
+        Animated.timing(pulse, { toValue: 0.6, duration: 1200, useNativeDriver: Platform.OS !== "web" }),
       ]),
     ).start();
   }, [pulse]);

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import Constants from "expo-constants";
+import { Image } from "expo-image";
 import React, { useEffect } from "react";
 import {
   Platform,
@@ -21,15 +22,7 @@ import { useUserData } from "@/contexts/UserDataContext";
 import { haptics } from "@/lib/haptics";
 import { logScreenView } from "@/lib/analytics";
 
-function SectionTitle({
-  title,
-  action,
-  onAction,
-}: {
-  title: string;
-  action?: string;
-  onAction?: () => void;
-}) {
+function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   const colors = useColors();
   return (
     <View style={pStyles.sectionTitle}>
@@ -43,15 +36,7 @@ function SectionTitle({
   );
 }
 
-function AppRow({
-  app,
-  onPress,
-  trailing,
-}: {
-  app: LiveStoreCatalogApp;
-  onPress: () => void;
-  trailing?: React.ReactNode;
-}) {
+function AppRow({ app, onPress, trailing }: { app: LiveStoreCatalogApp; onPress: () => void; trailing?: React.ReactNode }) {
   const colors = useColors();
   return (
     <Pressable
@@ -63,9 +48,7 @@ function AppRow({
     >
       <AppIcon uri={app.iconImage} slug={app.slug} overrideUri={app.iconOverrideUri} size={44} borderRadius={11} />
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[pStyles.appRowName, { color: colors.foreground }]} numberOfLines={1}>
-          {app.name}
-        </Text>
+        <Text style={[pStyles.appRowName, { color: colors.foreground }]} numberOfLines={1}>{app.name}</Text>
         <Text style={[pStyles.appRowMeta, { color: colors.mutedForeground }]} numberOfLines={1}>
           {app.category} · v{app.version}
         </Text>
@@ -86,20 +69,8 @@ function StatItem({ icon, label, value }: { icon: string; label: string; value: 
   );
 }
 
-function LinkRow({
-  icon,
-  label,
-  sub,
-  onPress,
-  iconColor,
-  disabled,
-}: {
-  icon: string;
-  label: string;
-  sub?: string;
-  onPress: () => void;
-  iconColor?: string;
-  disabled?: boolean;
+function LinkRow({ icon, label, sub, onPress, iconColor, disabled }: {
+  icon: string; label: string; sub?: string; onPress: () => void; iconColor?: string; disabled?: boolean;
 }) {
   const colors = useColors();
   if (disabled) return null;
@@ -123,15 +94,19 @@ function LinkRow({
 
 function openUrl(url: string) {
   if (!url) return;
-  const finalUrl = url.startsWith("http") ? url : `https://${url}`;
-  Linking.openURL(finalUrl).catch(() => {});
+  Linking.openURL(url.startsWith("http") ? url : `https://${url}`).catch(() => {});
 }
 
 function prettyUrl(url: string): string {
-  try {
-    return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
-  } catch { return url; }
+  try { return url.replace(/^https?:\/\//, "").replace(/\/$/, ""); } catch { return url; }
 }
+
+const FEATURES = [
+  { icon: "shield-checkmark-outline", label: "Safe\nDownloads" },
+  { icon: "refresh-circle-outline", label: "Live\nUpdates" },
+  { icon: "star-outline", label: "100%\nFree" },
+  { icon: "apps-outline", label: "19+\nApps" },
+] as const;
 
 export default function ProfileScreen() {
   const colors = useColors();
@@ -139,13 +114,11 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
-  const { apps, categories, connected } = useFirebaseCatalog();
+  const { apps, categories } = useFirebaseCatalog();
   const { config } = useRemoteConfig();
   const { favorites, toggleFavorite, clearFavorites, recentSlugs, clearRecentlyViewed } = useUserData();
 
-  useEffect(() => {
-    logScreenView("profile");
-  }, []);
+  useEffect(() => { logScreenView("profile"); }, []);
 
   const favoriteApps = favorites
     .map((slug) => apps.find((a) => a.slug === slug))
@@ -159,10 +132,7 @@ export default function ProfileScreen() {
   const totalCategories = categories.filter((c) => c !== "All").length;
   const newThisWeek = apps.filter((a) => a.isNew).length;
 
-  const handleAppPress = (slug: string) => {
-    haptics.light();
-    router.push(`/app/${slug}`);
-  };
+  const handleAppPress = (slug: string) => { haptics.light(); router.push(`/app/${slug}`); };
 
   return (
     <ScrollView
@@ -178,17 +148,9 @@ export default function ProfileScreen() {
           <Text style={[pStyles.headerEyebrow, { color: colors.accent }]}>AA MODS</Text>
           <Text style={[pStyles.headerTitle, { color: colors.foreground }]}>For You</Text>
         </View>
-        <View style={[pStyles.connBadge, {
-          backgroundColor: connected ? "rgba(0,230,115,0.12)" : "rgba(100,116,139,0.12)",
-          borderColor: connected ? "rgba(0,230,115,0.3)" : colors.border,
-        }]}>
-          <View style={[pStyles.connDot, { backgroundColor: connected ? "#00e673" : colors.mutedForeground }]} />
-          <Text style={[pStyles.connText, { color: connected ? colors.primary : colors.mutedForeground }]}>
-            {connected ? "LIVE" : "OFFLINE"}
-          </Text>
-        </View>
       </View>
 
+      {/* Stats */}
       <View style={pStyles.statsRow}>
         <StatItem icon="apps" label="Total Apps" value={apps.length} />
         <StatItem icon="layers-outline" label="Categories" value={totalCategories} />
@@ -255,81 +217,85 @@ export default function ProfileScreen() {
         )}
       </View>
 
-      {/* Links & Support — loaded from Firebase */}
+      {/* Links & Support */}
       <View style={{ marginTop: 24 }}>
         <SectionTitle title="Links & Support" />
         <View style={pStyles.linkList}>
-          <LinkRow
-            icon="paper-plane"
-            label="Telegram Channel"
-            sub={config.telegramUrl ? prettyUrl(config.telegramUrl) : "Updates & announcements"}
-            iconColor="#2AABEE"
-            onPress={() => openUrl(config.telegramUrl)}
-            disabled={!config.telegramUrl}
-          />
-          <LinkRow
-            icon="globe-outline"
-            label="AA Mods Website"
-            sub={config.websiteUrl ? prettyUrl(config.websiteUrl) : ""}
-            onPress={() => openUrl(config.websiteUrl)}
-            disabled={!config.websiteUrl}
-          />
-          <LinkRow
-            icon="logo-discord"
-            label="Discord Server"
-            sub={config.discordUrl ? prettyUrl(config.discordUrl) : ""}
-            iconColor="#5865F2"
-            onPress={() => openUrl(config.discordUrl)}
-            disabled={!config.discordUrl}
-          />
-          <LinkRow
-            icon="logo-instagram"
-            label="Instagram"
-            sub={config.instagramUrl ? prettyUrl(config.instagramUrl) : ""}
-            iconColor="#E1306C"
-            onPress={() => openUrl(config.instagramUrl)}
-            disabled={!config.instagramUrl}
-          />
-          <LinkRow
-            icon="mail-outline"
-            label="Contact Support"
-            sub={config.supportEmail || ""}
-            onPress={() => config.supportEmail && Linking.openURL(`mailto:${config.supportEmail}`).catch(() => {})}
-            disabled={!config.supportEmail}
-          />
+          <LinkRow icon="paper-plane" label="Telegram Channel" sub={config.telegramUrl ? prettyUrl(config.telegramUrl) : "Updates & announcements"} iconColor="#2AABEE" onPress={() => openUrl(config.telegramUrl)} disabled={!config.telegramUrl} />
+          <LinkRow icon="globe-outline" label="AA Mods Website" sub={config.websiteUrl ? prettyUrl(config.websiteUrl) : ""} onPress={() => openUrl(config.websiteUrl)} disabled={!config.websiteUrl} />
+          <LinkRow icon="logo-discord" label="Discord Server" sub={config.discordUrl ? prettyUrl(config.discordUrl) : ""} iconColor="#5865F2" onPress={() => openUrl(config.discordUrl)} disabled={!config.discordUrl} />
+          <LinkRow icon="logo-instagram" label="Instagram" sub={config.instagramUrl ? prettyUrl(config.instagramUrl) : ""} iconColor="#E1306C" onPress={() => openUrl(config.instagramUrl)} disabled={!config.instagramUrl} />
+          <LinkRow icon="mail-outline" label="Contact Support" sub={config.supportEmail || ""} onPress={() => config.supportEmail && Linking.openURL(`mailto:${config.supportEmail}`).catch(() => {})} disabled={!config.supportEmail} />
         </View>
       </View>
 
-      {/* About */}
-      <View style={{ marginTop: 24 }}>
-        <SectionTitle title="About" />
+      {/* ── Beautiful About Card ── */}
+      <View style={{ marginTop: 28 }}>
+        <SectionTitle title="About AA Mods" />
         <View style={[pStyles.aboutCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={pStyles.aboutRow}>
-            <Text style={[pStyles.aboutLabel, { color: colors.mutedForeground }]}>App Version</Text>
-            <Text style={[pStyles.aboutValue, { color: colors.foreground }]}>v{appVersion}</Text>
-          </View>
-          <View style={[pStyles.divider, { backgroundColor: colors.border }]} />
-          <View style={pStyles.aboutRow}>
-            <Text style={[pStyles.aboutLabel, { color: colors.mutedForeground }]}>Platform</Text>
-            <Text style={[pStyles.aboutValue, { color: colors.foreground }]}>
-              {Platform.OS === "android" ? "Android" : Platform.OS === "ios" ? "iOS" : "Web"}
-            </Text>
-          </View>
-          <View style={[pStyles.divider, { backgroundColor: colors.border }]} />
-          <View style={pStyles.aboutRow}>
-            <Text style={[pStyles.aboutLabel, { color: colors.mutedForeground }]}>Database</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: connected ? "#00e673" : colors.mutedForeground }} />
-              <Text style={[pStyles.aboutValue, { color: colors.foreground }]}>
-                Firebase {connected ? "(Connected)" : "(Offline)"}
+          {/* Brand header */}
+          <View style={pStyles.aboutBrand}>
+            <Image
+              source={{ uri: "https://aa-mods.replit.app/logo.png" }}
+              style={pStyles.aboutLogo}
+              contentFit="cover"
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={[pStyles.aboutAppName, { color: colors.foreground }]}>AA Mods Store</Text>
+              <Text style={[pStyles.aboutTagline, { color: colors.mutedForeground }]}>
+                Safe & stable Android MOD APK platform
               </Text>
+              <View style={pStyles.aboutVersionRow}>
+                <View style={[pStyles.aboutVerBadge, { backgroundColor: "rgba(0,230,115,0.12)", borderColor: "rgba(0,230,115,0.3)" }]}>
+                  <Text style={[pStyles.aboutVerText, { color: "#00e673" }]}>v{appVersion}</Text>
+                </View>
+                <View style={[pStyles.aboutVerBadge, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+                  <Ionicons name="phone-portrait-outline" size={10} color={colors.mutedForeground} />
+                  <Text style={[pStyles.aboutVerText, { color: colors.mutedForeground }]}>
+                    {Platform.OS === "android" ? "Android" : Platform.OS === "ios" ? "iOS" : "Web"}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
-          <View style={[pStyles.divider, { backgroundColor: colors.border }]} />
-          <View style={pStyles.aboutRow}>
-            <Text style={[pStyles.aboutLabel, { color: colors.mutedForeground }]}>Developer</Text>
-            <Text style={[pStyles.aboutValue, { color: colors.foreground }]}>AA Mods Team</Text>
+
+          {/* Feature grid */}
+          <View style={[pStyles.featureDivider, { backgroundColor: colors.border }]} />
+          <View style={pStyles.featureGrid}>
+            {FEATURES.map(({ icon, label }) => (
+              <View key={icon} style={[pStyles.featureItem, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+                <View style={[pStyles.featureIconWrap, { backgroundColor: "rgba(0,230,115,0.1)" }]}>
+                  <Ionicons name={icon as "apps"} size={18} color="#00e673" />
+                </View>
+                <Text style={[pStyles.featureLabel, { color: colors.foreground }]}>{label}</Text>
+              </View>
+            ))}
           </View>
+
+          {/* Info rows */}
+          <View style={[pStyles.featureDivider, { backgroundColor: colors.border }]} />
+          <View style={pStyles.infoRows}>
+            {[
+              { label: "Developer", value: "AA Mods Team" },
+              { label: "Total Apps", value: `${apps.length} MOD APKs` },
+              { label: "Categories", value: `${totalCategories} categories` },
+              { label: "License", value: "Free — always" },
+            ].map(({ label, value }, i, arr) => (
+              <View key={label}>
+                <View style={pStyles.infoRow}>
+                  <Text style={[pStyles.infoLabel, { color: colors.mutedForeground }]}>{label}</Text>
+                  <Text style={[pStyles.infoValue, { color: colors.foreground }]}>{value}</Text>
+                </View>
+                {i < arr.length - 1 && <View style={[pStyles.infoDiv, { backgroundColor: colors.border }]} />}
+              </View>
+            ))}
+          </View>
+
+          {/* Footer */}
+          <View style={[pStyles.featureDivider, { backgroundColor: colors.border }]} />
+          <Text style={[pStyles.aboutFooter, { color: colors.mutedForeground }]}>
+            Made with care by the AA Mods Team · All mods are tested &amp; verified
+          </Text>
         </View>
       </View>
     </ScrollView>
@@ -342,9 +308,6 @@ const pStyles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: 16 },
   headerEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 2, fontFamily: "Inter_700Bold" },
   headerTitle: { fontSize: 28, fontWeight: "800", letterSpacing: -0.5, fontFamily: "Inter_700Bold" },
-  connBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, marginTop: 4 },
-  connDot: { width: 6, height: 6, borderRadius: 3 },
-  connText: { fontSize: 10, fontWeight: "800", letterSpacing: 1.5, fontFamily: "Inter_700Bold" },
   statsRow: { flexDirection: "row", gap: 10 },
   statItem: { flex: 1, alignItems: "center", padding: 14, borderRadius: 16, borderWidth: 1, gap: 4 },
   statValue: { fontSize: 20, fontWeight: "800", fontFamily: "Inter_700Bold" },
@@ -362,9 +325,23 @@ const pStyles = StyleSheet.create({
   linkRow: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 14 },
   linkLabel: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   linkSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
-  aboutCard: { borderRadius: 16, borderWidth: 1, overflow: "hidden" },
-  aboutRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 14 },
-  aboutLabel: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  aboutValue: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  divider: { height: 1, marginHorizontal: 14 },
+  aboutCard: { borderRadius: 20, borderWidth: 1, overflow: "hidden" },
+  aboutBrand: { flexDirection: "row", gap: 14, padding: 18, alignItems: "flex-start" },
+  aboutLogo: { width: 60, height: 60, borderRadius: 14 },
+  aboutAppName: { fontSize: 17, fontWeight: "800", fontFamily: "Inter_700Bold" },
+  aboutTagline: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 3, lineHeight: 17 },
+  aboutVersionRow: { flexDirection: "row", gap: 6, marginTop: 8 },
+  aboutVerBadge: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 6, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 3 },
+  aboutVerText: { fontSize: 10, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  featureDivider: { height: 1 },
+  featureGrid: { flexDirection: "row", padding: 14, gap: 10 },
+  featureItem: { flex: 1, alignItems: "center", gap: 8, borderRadius: 14, borderWidth: 1, padding: 12 },
+  featureIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  featureLabel: { fontSize: 10, fontWeight: "600", fontFamily: "Inter_600SemiBold", textAlign: "center", lineHeight: 14 },
+  infoRows: { paddingHorizontal: 16 },
+  infoRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 12 },
+  infoDiv: { height: 1 },
+  infoLabel: { fontSize: 13, fontFamily: "Inter_400Regular" },
+  infoValue: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  aboutFooter: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", padding: 14, lineHeight: 17 },
 });

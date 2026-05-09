@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, View, StyleSheet } from "react-native";
+import { Animated, Platform, View, StyleSheet } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 
@@ -18,8 +18,8 @@ function SkeletonBox({
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.65, duration: 750, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 750, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.65, duration: 750, useNativeDriver: Platform.OS !== "web" }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 750, useNativeDriver: Platform.OS !== "web" }),
       ]),
     );
     anim.start();

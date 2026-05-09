@@ -32,16 +32,21 @@ const GestureHandlerRootView = _GestureHandlerRootView as unknown as React.Compo
 const isExpoGo = Constants.appOwnership === "expo";
 
 SplashScreen.preventAutoHideAsync();
-
 initializeOneSignal();
 
+// Suppress font-loading timeout unhandled rejections on web — these are cosmetic
+// and happen when the Replit sandbox is slow to respond to font requests.
+if (Platform.OS === "web" && typeof window !== "undefined") {
+  window.addEventListener("unhandledrejection", (event) => {
+    const msg: string = event?.reason?.message ?? "";
+    if (msg.includes("timeout exceeded") || msg.includes("FontFace")) {
+      event.preventDefault();
+    }
+  });
+}
+
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 2,
-      staleTime: 30_000,
-    },
-  },
+  defaultOptions: { queries: { retry: 2, staleTime: 30_000 } },
 });
 
 type WrapperProps = { children: React.ReactNode };
@@ -57,7 +62,7 @@ const KeyboardWrapper: React.FC<WrapperProps> =
       })();
 
 function RootLayoutNav() {
-  const notificationListener = useRef<Notifications.EventSubscription | null>(null);
+  const notifListener = useRef<Notifications.EventSubscription | null>(null);
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
   const { config, loaded } = useRemoteConfig();
 
@@ -67,22 +72,22 @@ function RootLayoutNav() {
     if (!isExpoGo) {
       setupPushNotifications().catch(() => {});
 
-      notificationListener.current = Notifications.addNotificationReceivedListener((n) => {
-        console.log("[Notification received]", n.request.content.title);
+      notifListener.current = Notifications.addNotificationReceivedListener((n) => {
+        console.log("[Notification]", n.request.content.title);
       });
 
       responseListener.current = Notifications.addNotificationResponseReceivedListener((r) => {
         const data = r.notification.request.content.data as Record<string, unknown>;
-        if (data?.url && typeof data.url === "string") {
+        if (typeof data?.url === "string") {
           Linking.openURL(data.url).catch(() => {});
-        } else if (data?.slug && typeof data.slug === "string") {
+        } else if (typeof data?.slug === "string") {
           Linking.openURL(`aa-mods:///app/${data.slug}`).catch(() => {});
         }
       });
     }
 
     return () => {
-      notificationListener.current?.remove();
+      notifListener.current?.remove();
       responseListener.current?.remove();
     };
   }, []);
@@ -94,10 +99,7 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="app/[slug]"
-        options={{ headerShown: false, animation: "slide_from_right" }}
-      />
+      <Stack.Screen name="app/[slug]" options={{ headerShown: false, animation: "slide_from_right" }} />
     </Stack>
   );
 }

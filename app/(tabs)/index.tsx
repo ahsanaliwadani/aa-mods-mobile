@@ -70,10 +70,10 @@ function FeaturedCard({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () 
       <Pressable
         onPress={onPress}
         onPressIn={() =>
-          Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: true, speed: 50 }).start()
+          Animated.spring(scaleAnim, { toValue: 0.95, useNativeDriver: Platform.OS !== "web", speed: 50 }).start()
         }
         onPressOut={() =>
-          Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50 }).start()
+          Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: Platform.OS !== "web", speed: 50 }).start()
         }
         style={[featStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
@@ -108,8 +108,8 @@ function LiveDot() {
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.3, duration: 800, useNativeDriver: Platform.OS !== "web" }),
+        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: Platform.OS !== "web" }),
       ]),
     ).start();
   }, [pulse]);
@@ -226,8 +226,8 @@ const AppCard = React.memo(function AppCard({
   const colors = useColors();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
-  const onPressIn = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start();
-  const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50 }).start();
+  const onPressIn = () => Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: Platform.OS !== "web", speed: 50 }).start();
+  const onPressOut = () => Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: Platform.OS !== "web", speed: 50 }).start();
 
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
