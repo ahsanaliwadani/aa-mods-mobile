@@ -7,6 +7,7 @@ import type { StyleProp, ViewStyle } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
+import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { GlobalDownloadBar } from "@/components/GlobalDownloadBar";
 
 const BlurView = _BlurView as unknown as React.ComponentType<{
@@ -15,10 +16,10 @@ const BlurView = _BlurView as unknown as React.ComponentType<{
   style?: StyleProp<ViewStyle>;
 }>;
 
-function NewBadge({ count }: { count: number }) {
+function Badge({ count, color }: { count: number; color?: string }) {
   if (count === 0) return null;
   return (
-    <View style={badgeStyles.badge}>
+    <View style={[badgeStyles.badge, { backgroundColor: color ?? "#00e673" }]}>
       <Text style={badgeStyles.badgeText}>{count > 9 ? "9+" : count}</Text>
     </View>
   );
@@ -29,7 +30,6 @@ const badgeStyles = StyleSheet.create({
     position: "absolute",
     top: -4,
     right: -8,
-    backgroundColor: "#00e673",
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -50,7 +50,12 @@ export default function TabLayout() {
   const isIOS = Platform.OS === "ios";
   const isDark = true;
   const { newCount } = useFirebaseCatalog();
+  const dm = useDownloadManager();
   const router = useRouter();
+
+  const activeDownloads = Array.from(dm.downloads.values()).filter(
+    (e) => e.phase === "downloading" || e.phase === "resolving",
+  ).length;
 
   const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 56;
 
@@ -107,7 +112,7 @@ export default function TabLayout() {
                   size={24}
                   color={color}
                 />
-                <NewBadge count={newCount} />
+                <Badge count={newCount} />
               </View>
             ),
           }}
@@ -122,16 +127,34 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="downloads"
+          options={{
+            title: "Downloads",
+            tabBarIcon: ({ color, focused }) => (
+              <View>
+                <Ionicons
+                  name={focused ? "download" : "download-outline"}
+                  size={22}
+                  color={color}
+                />
+                <Badge count={activeDownloads} color={colors.primary} />
+              </View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: "Settings",
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? "settings" : "settings-outline"} size={22} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="profile"
           options={{
-            title: "For You",
-            tabBarIcon: ({ color, focused }) => (
-              <Ionicons
-                name={focused ? "person-circle" : "person-circle-outline"}
-                size={24}
-                color={color}
-              />
-            ),
+            href: null,
           }}
         />
       </Tabs>

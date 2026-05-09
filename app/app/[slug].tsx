@@ -344,6 +344,21 @@ export default function AppDetailScreen() {
           </View>
         )}
 
+        {/* Long Description / About This Mod */}
+        {(longDescription || app.shortDescription) && (
+          <SectionBlock
+            icon="document-text-outline"
+            title="ABOUT THIS MOD"
+            color={colors.accent}
+            bgColor={colors.card}
+            borderColor={colors.border}
+          >
+            <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>
+              {longDescription || app.shortDescription}
+            </Text>
+          </SectionBlock>
+        )}
+
         {/* What's New */}
         {whatsNew && whatsNew.length > 0 && (
           <SectionBlock icon="sparkles-outline" title="WHAT'S NEW" color={colors.primary} bgColor="rgba(0,230,115,0.05)" borderColor="rgba(0,230,115,0.2)">
