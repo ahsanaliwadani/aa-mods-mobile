@@ -68,7 +68,7 @@ function UpdateCard({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () =>
       ]}
     >
       <View style={styles.cardRow}>
-        <AppIcon uri={app.iconImage} size={48} borderRadius={12} />
+        <AppIcon uri={app.iconImage} slug={app.slug} size={48} borderRadius={12} />
 
         <View style={styles.meta}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>

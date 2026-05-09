@@ -61,11 +61,12 @@ type Props = {
   link: string;
   label: string;
   appName: string;
+  appSlug?: string;
   iconUri?: string;
   onClose: () => void;
 };
 
-export function DownloadSheet({ visible, link, label, appName, iconUri, onClose }: Props) {
+export function DownloadSheet({ visible, link, label, appName, appSlug, iconUri, onClose }: Props) {
   const colors = useColors();
   const [state, setState] = useState<DownloadState>("idle");
   const [progress, setProgress] = useState(0);
@@ -193,7 +194,7 @@ export function DownloadSheet({ visible, link, label, appName, iconUri, onClose 
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
           <View style={styles.appRow}>
-            <AppIcon uri={iconUri} size={52} borderRadius={14} iconSize={26} />
+            <AppIcon uri={iconUri} slug={appSlug} size={52} borderRadius={14} iconSize={26} />
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={[styles.appName, { color: colors.foreground }]} numberOfLines={1}>{appName}</Text>
               <Text style={[styles.appSub, { color: colors.mutedForeground }]}>{label}</Text>

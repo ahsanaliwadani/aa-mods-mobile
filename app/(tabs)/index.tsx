@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons, Feather } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
@@ -76,7 +77,7 @@ function FeaturedCard({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () 
         }
         style={[featStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
-        <AppIcon uri={app.iconImage} size={64} borderRadius={16} />
+        <AppIcon uri={app.iconImage} slug={app.slug} size={64} borderRadius={16} />
         <View style={{ gap: 2, marginTop: 8, width: "100%" }}>
           <Text style={[featStyles.name, { color: colors.foreground }]} numberOfLines={1}>
             {app.name}
@@ -172,7 +173,7 @@ function QuickActionSheet({ app, visible, onClose, isFav, onToggleFav, onShare, 
         <Pressable style={[qaStyles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[qaStyles.handle, { backgroundColor: colors.border }]} />
           <View style={qaStyles.appInfo}>
-            <AppIcon uri={app.iconImage} size={44} borderRadius={11} />
+            <AppIcon uri={app.iconImage} slug={app.slug} size={44} borderRadius={11} />
             <View style={{ flex: 1 }}>
               <Text style={[qaStyles.appName, { color: colors.foreground }]} numberOfLines={1}>{app.name}</Text>
               <Text style={[qaStyles.appMeta, { color: colors.mutedForeground }]}>{app.category} · v{app.version}</Text>
@@ -241,7 +242,7 @@ const AppCard = React.memo(function AppCard({
       >
         <View style={styles.appCardHeader}>
           <View style={styles.appIconWrapper}>
-            <AppIcon uri={app.iconImage} size={56} borderRadius={14} />
+            <AppIcon uri={app.iconImage} slug={app.slug} size={56} borderRadius={14} />
             <View style={[styles.verifiedDot, { backgroundColor: colors.primary, borderColor: colors.background }]} />
           </View>
           <View style={styles.appCardMeta}>
@@ -410,9 +411,17 @@ export default function HomeScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View style={styles.headerTop}>
-          <View>
-            <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
-            <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Image
+              source={require("@/assets/images/icon.png")}
+              style={{ width: 36, height: 36, borderRadius: 10 }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+            <View>
+              <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
+              <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
+            </View>
           </View>
           <View style={{ alignItems: "flex-end", gap: 4 }}>
             <View style={[styles.headerBadge, { backgroundColor: "rgba(0,230,115,0.12)", borderColor: "rgba(0,230,115,0.3)" }]}>

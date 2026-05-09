@@ -4,9 +4,11 @@ import React from "react";
 import { View } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
+import { getLocalIcon } from "@/lib/appIconMap";
 
 type AppIconProps = {
   uri?: string;
+  slug?: string;
   size?: number;
   borderRadius?: number;
   iconSize?: number;
@@ -14,6 +16,7 @@ type AppIconProps = {
 
 export const AppIcon = React.memo(function AppIcon({
   uri,
+  slug,
   size = 56,
   borderRadius = 14,
   iconSize,
@@ -21,10 +24,21 @@ export const AppIcon = React.memo(function AppIcon({
   const colors = useColors();
   const fallbackIconSize = iconSize ?? Math.round(size * 0.5);
 
-  if (uri) {
+  const localSource = slug ? getLocalIcon(slug) : undefined;
+  const isRemoteUri = uri && uri.startsWith("http");
+
+  const imageSource = isRemoteUri
+    ? { uri }
+    : localSource !== undefined
+      ? localSource
+      : uri
+        ? { uri }
+        : undefined;
+
+  if (imageSource !== undefined) {
     return (
       <Image
-        source={{ uri }}
+        source={imageSource}
         style={{
           width: size,
           height: size,
@@ -34,7 +48,7 @@ export const AppIcon = React.memo(function AppIcon({
         }}
         contentFit="cover"
         transition={150}
-        recyclingKey={uri}
+        recyclingKey={slug ?? uri}
         cachePolicy="memory-disk"
       />
     );

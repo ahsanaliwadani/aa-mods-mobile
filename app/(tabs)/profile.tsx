@@ -61,7 +61,7 @@ function AppRow({
         { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
       ]}
     >
-      <AppIcon uri={app.iconImage} size={44} borderRadius={11} />
+      <AppIcon uri={app.iconImage} slug={app.slug} size={44} borderRadius={11} />
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={[pStyles.appRowName, { color: colors.foreground }]} numberOfLines={1}>
           {app.name}

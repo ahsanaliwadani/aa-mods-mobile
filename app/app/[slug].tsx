@@ -202,7 +202,7 @@ export default function AppDetailScreen() {
         {/* Hero */}
         <View style={[styles.heroSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.heroTop}>
-            <AppIcon uri={app.iconImage} size={80} borderRadius={20} iconSize={40} />
+            <AppIcon uri={app.iconImage} slug={app.slug} size={80} borderRadius={20} iconSize={40} />
             <View style={styles.heroInfo}>
               <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
                 <View style={[styles.officialBadge, { backgroundColor: "rgba(34,211,238,0.1)", borderColor: "rgba(34,211,238,0.3)" }]}>
@@ -441,6 +441,7 @@ export default function AppDetailScreen() {
         label={dlSheet.currentLabel}
         appName={app.name}
         iconUri={app.iconImage}
+        appSlug={app.slug}
         onClose={dlSheet.close}
       />
     </View>
