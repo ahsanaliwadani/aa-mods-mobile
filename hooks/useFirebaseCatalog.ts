@@ -7,6 +7,7 @@ const BASE_ICON_URL = "https://aa-mods.replit.app";
 
 export type LiveStoreCatalogApp = StoreCatalogApp & {
   isNew: boolean;
+  iconOverrideUri?: string;
   changelog?: string[];
   whatsNew?: string[];
 };
@@ -32,6 +33,20 @@ function resolveIcon(data: Record<string, unknown>, fallback?: string): string |
     return (data.iconImage as string) || fallback;
   } catch {
     return fallback;
+  }
+}
+
+function resolveIconOverride(raw: Record<string, unknown>): string | undefined {
+  try {
+    const iconPath = raw.iconPath as string | undefined;
+    if (iconPath) {
+      return iconPath.startsWith("http") ? iconPath : `${BASE_ICON_URL}${iconPath}`;
+    }
+    const iconImage = raw.iconImage as string | undefined;
+    if (iconImage && iconImage.startsWith("http")) return iconImage;
+    return undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -65,6 +80,7 @@ function parseFirebaseApp(
       gradient: fallback?.gradient || "from-slate-900 to-slate-700",
       iconType: fallback?.iconType || "default",
       iconImage: resolveIcon(raw, fallback?.iconImage),
+      iconOverrideUri: resolveIconOverride(raw),
       directDownloadLink: (raw.directDownloadLink as string) || fallback?.directDownloadLink,
       downloadLink: (raw.downloadLink as string) || fallback?.downloadLink,
       downloadButtons,

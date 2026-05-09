@@ -8,6 +8,7 @@ import { getLocalIcon } from "@/lib/appIconMap";
 
 type AppIconProps = {
   uri?: string;
+  overrideUri?: string;
   slug?: string;
   size?: number;
   borderRadius?: number;
@@ -16,6 +17,7 @@ type AppIconProps = {
 
 export const AppIcon = React.memo(function AppIcon({
   uri,
+  overrideUri,
   slug,
   size = 56,
   borderRadius = 14,
@@ -25,13 +27,12 @@ export const AppIcon = React.memo(function AppIcon({
   const fallbackIconSize = iconSize ?? Math.round(size * 0.5);
 
   const localSource = slug ? getLocalIcon(slug) : undefined;
-  const isRemoteUri = uri && uri.startsWith("http");
 
-  const imageSource = isRemoteUri
-    ? { uri }
+  const imageSource: { uri: string } | number | undefined = overrideUri
+    ? { uri: overrideUri }
     : localSource !== undefined
       ? localSource
-      : uri
+      : uri && uri.startsWith("http")
         ? { uri }
         : undefined;
 
@@ -48,7 +49,7 @@ export const AppIcon = React.memo(function AppIcon({
         }}
         contentFit="cover"
         transition={150}
-        recyclingKey={slug ?? uri}
+        recyclingKey={overrideUri ?? (slug ?? uri)}
         cachePolicy="memory-disk"
       />
     );

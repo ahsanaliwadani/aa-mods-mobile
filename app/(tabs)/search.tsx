@@ -37,7 +37,7 @@ function SearchResultRow({ app, onPress }: { app: LiveStoreCatalogApp; onPress: 
         { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
       ]}
     >
-      <AppIcon uri={app.iconImage} slug={app.slug} size={48} borderRadius={12} />
+      <AppIcon uri={app.iconImage} slug={app.slug} overrideUri={app.iconOverrideUri} size={48} borderRadius={12} />
       <View style={styles.resultMeta}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
           <Text style={[styles.resultName, { color: colors.foreground }]} numberOfLines={1}>{app.name}</Text>

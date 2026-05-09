@@ -15,6 +15,9 @@ const appIconMap: Record<string, number> = {
   "youtube-premium-mod": require("../assets/icons/youtube-premium.webp") as number,
   "vidmate-Mods": require("../assets/icons/vidmate.webp") as number,
   "remini-mod": require("../assets/icons/remini.webp") as number,
+  "camscanner-mod": require("../assets/icons/cam-scanner.png") as number,
+  "super-vpn-pro": require("../assets/icons/supervpn.png") as number,
+  "telegram-mod": require("../assets/icons/telegram.png") as number,
 };
 
 export function getLocalIcon(slug: string): number | undefined {

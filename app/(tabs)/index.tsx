@@ -77,7 +77,7 @@ function FeaturedCard({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () 
         }
         style={[featStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
       >
-        <AppIcon uri={app.iconImage} slug={app.slug} size={64} borderRadius={16} />
+        <AppIcon uri={app.iconImage} slug={app.slug} overrideUri={app.iconOverrideUri} size={64} borderRadius={16} />
         <View style={{ gap: 2, marginTop: 8, width: "100%" }}>
           <Text style={[featStyles.name, { color: colors.foreground }]} numberOfLines={1}>
             {app.name}
@@ -173,7 +173,7 @@ function QuickActionSheet({ app, visible, onClose, isFav, onToggleFav, onShare, 
         <Pressable style={[qaStyles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[qaStyles.handle, { backgroundColor: colors.border }]} />
           <View style={qaStyles.appInfo}>
-            <AppIcon uri={app.iconImage} slug={app.slug} size={44} borderRadius={11} />
+            <AppIcon uri={app.iconImage} slug={app.slug} overrideUri={app.iconOverrideUri} size={44} borderRadius={11} />
             <View style={{ flex: 1 }}>
               <Text style={[qaStyles.appName, { color: colors.foreground }]} numberOfLines={1}>{app.name}</Text>
               <Text style={[qaStyles.appMeta, { color: colors.mutedForeground }]}>{app.category} · v{app.version}</Text>
@@ -242,7 +242,7 @@ const AppCard = React.memo(function AppCard({
       >
         <View style={styles.appCardHeader}>
           <View style={styles.appIconWrapper}>
-            <AppIcon uri={app.iconImage} slug={app.slug} size={56} borderRadius={14} />
+            <AppIcon uri={app.iconImage} slug={app.slug} overrideUri={app.iconOverrideUri} size={56} borderRadius={14} />
             <View style={[styles.verifiedDot, { backgroundColor: colors.primary, borderColor: colors.background }]} />
           </View>
           <View style={styles.appCardMeta}>
