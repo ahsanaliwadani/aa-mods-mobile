@@ -27,7 +27,6 @@ import { haptics, refreshHapticsPreference } from "@/lib/haptics";
 import { logScreenView } from "@/lib/analytics";
 
 const PREFS_KEY = "@aa_mods_prefs_v1";
-const SEEN_KEY = "@aa_mods_seen_slugs_v1";
 const AA_MODS_DIR = FileSystem.documentDirectory ? `${FileSystem.documentDirectory}AAMods/` : null;
 
 type SortOption = "newest" | "alphabetical" | "downloads" | "rating";
@@ -280,39 +279,31 @@ export default function SettingsScreen() {
     if (Platform.OS === "web") return;
     setClearingCache(true);
     try {
-      // Remove all download entries from state & storage
-      const allDownloads = Array.from(dm.downloads.values());
-      for (const entry of allDownloads) {
-        if (entry.apkPath) {
-          try { await FileSystem.deleteAsync(entry.apkPath, { idempotent: true }); } catch {}
-        }
-        dm.clearEntry(entry.slug);
-      }
-
-      // Delete the entire AAMods directory and recreate it fresh
       if (AA_MODS_DIR) {
         const dirInfo = await FileSystem.getInfoAsync(AA_MODS_DIR);
         if (dirInfo.exists) {
-          await FileSystem.deleteAsync(AA_MODS_DIR, { idempotent: true });
+          try {
+            const files = await FileSystem.readDirectoryAsync(AA_MODS_DIR);
+            for (const file of files) {
+              if (file.toLowerCase().endsWith(".apk")) {
+                await FileSystem.deleteAsync(`${AA_MODS_DIR}${file}`, { idempotent: true }).catch(() => {});
+              }
+            }
+          } catch {
+            await FileSystem.deleteAsync(AA_MODS_DIR, { idempotent: true }).catch(() => {});
+            await FileSystem.makeDirectoryAsync(AA_MODS_DIR, { intermediates: true }).catch(() => {});
+          }
         }
-        await FileSystem.makeDirectoryAsync(AA_MODS_DIR, { intermediates: true }).catch(() => {});
       }
-
       await refreshCacheSize();
-      haptics.success?.() ?? haptics.medium();
-      Alert.alert("Cache Cleared", "All downloaded APK files have been removed.");
+      haptics.medium();
+      Alert.alert("Cache Cleared", "All APK files removed from device storage. Your download history is preserved.");
     } catch {
       Alert.alert("Error", "Could not clear cache. Please try again.");
     } finally {
       setClearingCache(false);
     }
-  }, [dm, refreshCacheSize]);
-
-  const clearSeenApps = useCallback(async () => {
-    await AsyncStorage.removeItem(SEEN_KEY).catch(() => {});
-    haptics.medium();
-    Alert.alert("Reset", "Update notifications will re-trigger on next sync.");
-  }, []);
+  }, [refreshCacheSize]);
 
   const clearAllData = useCallback(async () => {
     Alert.alert(
@@ -717,13 +708,6 @@ export default function SettingsScreen() {
       <View style={sStyles.group}>
         <SectionTitle title="Data Management" />
         <View style={sStyles.rowGroup}>
-          <SettingRow
-            icon="eye-outline"
-            label="Reset Update Notifications"
-            sub="Re-trigger new app alerts on next sync"
-            onPress={clearSeenApps}
-            trailing={<Text style={[sStyles.actionLink, { color: colors.accent }]}>Reset</Text>}
-          />
           {installedCount > 0 && (
             <SettingRow
               icon="phone-portrait-outline"

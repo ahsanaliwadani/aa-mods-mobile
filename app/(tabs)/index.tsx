@@ -429,7 +429,7 @@ export default function HomeScreen() {
     try {
       haptics.light();
       logShareApp(app.slug, app.name);
-      const appLink = `https://aa-mods.replit.app/app/${app.slug}`;
+      const appLink = `https://aa-mods.vercel.app/app/${app.slug}`;
       const stars = "⭐".repeat(Math.round(parseFloat(app.rating)));
       const message = [
         `📱 ${app.name}`,

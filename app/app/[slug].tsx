@@ -1,9 +1,12 @@
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -75,6 +78,8 @@ export default function AppDetailScreen() {
   const dlSheet = useDownloadSheet();
 
   const [showFullChangelog, setShowFullChangelog] = useState(false);
+  const [screenshotIdx, setScreenshotIdx] = useState<number | null>(null);
+  const SCREEN_W = Dimensions.get("window").width;
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
@@ -113,7 +118,7 @@ export default function AppDetailScreen() {
     try {
       haptics.light();
       if (app) logShareApp(slug ?? "", app.name);
-      const appLink = `https://aa-mods.replit.app/app/${slug}`;
+      const appLink = `https://aa-mods.vercel.app/app/${slug}`;
       const stars = "⭐".repeat(Math.round(parseFloat(app?.rating ?? "5")));
       const message = [
         `📱 ${app?.name ?? "AA Mods App"}`,
@@ -191,6 +196,9 @@ export default function AppDetailScreen() {
   const seeMoreMods = detail?.seeMoreMods;
   const fileSize = detail?.fileSize;
   const androidReq = detail?.androidRequirement;
+  const screenshots = detail?.screenshots;
+  const permissions = detail?.permissions;
+  const features = detail?.features;
 
   const changelogToShow = showFullChangelog ? changelog : changelog?.slice(0, 4);
 
@@ -443,6 +451,35 @@ export default function AppDetailScreen() {
           </SectionBlock>
         )}
 
+        {/* Screenshot Gallery */}
+        {screenshots && screenshots.length > 0 && (
+          <View style={styles.screenshotSection}>
+            <View style={[styles.sectionHeader, { marginBottom: 10 }]}>
+              <Ionicons name="images-outline" size={16} color={colors.accent} />
+              <Text style={[styles.sectionTitle, { color: colors.accent }]}>SCREENSHOTS</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.screenshotScroll} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
+              {screenshots.map((uri, idx) => (
+                <Pressable key={idx} onPress={() => { haptics.light(); setScreenshotIdx(idx); }}>
+                  <Image source={{ uri }} style={styles.screenshotThumb} contentFit="cover" />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Features */}
+        {features && features.length > 0 && (
+          <SectionBlock icon="sparkles-outline" title="MOD FEATURES" color={colors.primary} bgColor="rgba(0,230,115,0.04)" borderColor="rgba(0,230,115,0.18)">
+            {features.map((item, i) => (
+              <View key={i} style={styles.listItem}>
+                <Ionicons name="checkmark-circle" size={14} color={colors.primary} style={{ marginTop: 4, flexShrink: 0 }} />
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
+              </View>
+            ))}
+          </SectionBlock>
+        )}
+
         {/* Downloads */}
         <View style={styles.downloadSection}>
           <Text style={[styles.downloadSectionTitle, { color: colors.foreground }]}>
@@ -462,7 +499,7 @@ export default function AppDetailScreen() {
                 <Pressable
                   key={idx}
                   testID={idx === 0 ? "download-button" : "download-button-secondary"}
-                  onPress={() => handleDownload(btn.link, `Download APK — ${btn.label}`)}
+                  onPress={() => handleDownload(btn.link, btn.label)}
                   style={({ pressed }) =>
                     idx === 0
                       ? [styles.primaryDownloadBtn, {
@@ -470,21 +507,29 @@ export default function AppDetailScreen() {
                           opacity: pressed ? 0.85 : 1,
                           transform: [{ scale: pressed ? 0.98 : 1 }],
                         }]
-                      : [styles.secondaryDownloadBtn, { backgroundColor: "rgba(34,211,238,0.08)", borderColor: "rgba(34,211,238,0.35)", opacity: pressed ? 0.8 : 1 }]
+                      : [styles.secondaryDownloadBtn, { backgroundColor: "rgba(34,211,238,0.06)", borderColor: "rgba(34,211,238,0.3)", opacity: pressed ? 0.8 : 1 }]
                   }
                 >
                   <Ionicons
-                    name={hasUpdate ? "arrow-up-circle" : "download"}
-                    size={idx === 0 ? 20 : 16}
+                    name={hasUpdate ? "arrow-up-circle" : idx === 0 ? "download" : "cloud-download-outline"}
+                    size={idx === 0 ? 20 : 17}
                     color={idx === 0 ? (hasUpdate ? "#000" : colors.primaryForeground) : colors.accent}
                   />
-                  <Text style={idx === 0
-                    ? [styles.primaryDownloadText, { color: hasUpdate ? "#000" : colors.primaryForeground }]
-                    : [styles.secondaryDownloadText, { color: colors.accent }]}>
-                    {idx === 0
-                      ? (hasUpdate ? `Update to v${app.version}` : `Download APK — ${btn.label}`)
-                      : `Download APK — ${btn.label}`}
-                  </Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={idx === 0
+                      ? [styles.primaryDownloadText, { color: hasUpdate ? "#000" : colors.primaryForeground }]
+                      : [styles.secondaryDownloadText, { color: colors.accent }]}>
+                      {idx === 0
+                        ? (hasUpdate ? `Update to v${app.version}` : "Download APK")
+                        : "Download APK"}
+                    </Text>
+                    {btn.label ? (
+                      <Text style={[styles.btnLabelSub, { color: idx === 0 ? (hasUpdate ? "rgba(0,0,0,0.55)" : "rgba(4,19,27,0.7)") : colors.mutedForeground }]}>
+                        {btn.label}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {idx > 0 && <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />}
                 </Pressable>
               ))}
             </View>
@@ -568,6 +613,18 @@ export default function AppDetailScreen() {
           )}
         </View>
 
+        {/* Permissions */}
+        {permissions && permissions.length > 0 && (
+          <SectionBlock icon="shield-outline" title="PERMISSIONS REQUIRED" color="#f59e0b" bgColor="rgba(245,158,11,0.04)" borderColor="rgba(245,158,11,0.2)">
+            {permissions.map((item, i) => (
+              <View key={i} style={styles.listItem}>
+                <Ionicons name="lock-closed-outline" size={13} color="#f59e0b" style={{ marginTop: 5, flexShrink: 0 }} />
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
+              </View>
+            ))}
+          </SectionBlock>
+        )}
+
         {/* Support */}
         {(detail?.telegramGroup || detail?.supportEmail) && (
           <SectionBlock icon="headset-outline" title="SUPPORT" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
@@ -624,6 +681,46 @@ export default function AppDetailScreen() {
         appVersion={app.version}
         onClose={dlSheet.close}
       />
+
+      {/* Screenshot Fullscreen Viewer */}
+      {screenshots && screenshots.length > 0 && screenshotIdx !== null && (
+        <Modal
+          visible={screenshotIdx !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setScreenshotIdx(null)}
+          statusBarTranslucent
+        >
+          <Pressable style={styles.screenshotOverlay} onPress={() => setScreenshotIdx(null)}>
+            <View style={styles.screenshotFull}>
+              <Image
+                source={{ uri: screenshots[screenshotIdx] }}
+                style={[styles.screenshotFullImg, { width: SCREEN_W - 32 }]}
+                contentFit="contain"
+              />
+              <View style={styles.screenshotNav}>
+                <Pressable
+                  onPress={() => setScreenshotIdx((i) => (i !== null && i > 0 ? i - 1 : screenshots.length - 1))}
+                  style={styles.screenshotNavBtn}
+                  hitSlop={12}
+                >
+                  <Ionicons name="chevron-back" size={22} color="#fff" />
+                </Pressable>
+                <Text style={styles.screenshotCounter}>
+                  {screenshotIdx + 1} / {screenshots.length}
+                </Text>
+                <Pressable
+                  onPress={() => setScreenshotIdx((i) => (i !== null && i < screenshots.length - 1 ? i + 1 : 0))}
+                  style={styles.screenshotNavBtn}
+                  hitSlop={12}
+                >
+                  <Ionicons name="chevron-forward" size={22} color="#fff" />
+                </Pressable>
+              </View>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -707,14 +804,14 @@ const styles = StyleSheet.create({
   secondaryDownloadBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    gap: 10,
     borderRadius: 14,
     borderWidth: 1,
-    paddingVertical: 13,
+    paddingVertical: 12,
     paddingHorizontal: 16,
   },
-  secondaryDownloadText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  secondaryDownloadText: { fontSize: 14, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  btnLabelSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
   noDownloadNotice: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, padding: 14, marginTop: 8 },
   noDownloadText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular" },
   mirrorLabel: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold", marginTop: 4 },
@@ -723,6 +820,15 @@ const styles = StyleSheet.create({
   seeMoreRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderTopWidth: 1, marginTop: 4 },
   seeMoreText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
   shimmerLine: { height: 12, borderRadius: 6, marginBottom: 6 },
+  screenshotSection: { gap: 2 },
+  screenshotScroll: {},
+  screenshotThumb: { width: 120, height: 200, borderRadius: 12 },
+  screenshotOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center" },
+  screenshotFull: { alignItems: "center", gap: 16 },
+  screenshotFullImg: { height: 420, borderRadius: 16 },
+  screenshotNav: { flexDirection: "row", alignItems: "center", gap: 24 },
+  screenshotNavBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
+  screenshotCounter: { color: "#fff", fontSize: 14, fontFamily: "Inter_600SemiBold" },
   notFoundContainer: { flex: 1 },
   notFoundContent: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
   notFoundTitle: { fontSize: 20, fontWeight: "800", fontFamily: "Inter_700Bold" },

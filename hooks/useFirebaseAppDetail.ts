@@ -25,6 +25,9 @@ export type AppDetailExtra = {
   androidRequirement?: string;
   fileSize?: string;
   latestVersion?: string;
+  screenshots?: string[];
+  permissions?: string[];
+  features?: string[];
 };
 
 function safeStringArray(val: unknown): string[] | undefined {
@@ -114,6 +117,9 @@ export function useFirebaseAppDetail(slug: string) {
                   : typeof raw.version === "string"
                     ? raw.version
                     : undefined,
+              screenshots: safeStringArray(raw.screenshots),
+              permissions: safeStringArray(raw.permissions),
+              features: safeStringArray(raw.features),
             });
 
             setLoading(false);

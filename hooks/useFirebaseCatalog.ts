@@ -3,7 +3,7 @@ import { ref, onValue, type DataSnapshot } from "firebase/database";
 import { database } from "@/lib/firebase";
 import { storeApps, storeCategories as defaultCategories, type StoreCatalogApp } from "@/data/storeCatalog";
 
-const BASE_ICON_URL = "https://aa-mods.replit.app";
+const BASE_ICON_URL = "https://aa-mods.vercel.app";
 
 export type LiveStoreCatalogApp = StoreCatalogApp & {
   isNew: boolean;

@@ -1,4 +1,4 @@
-const BASE_ICON_URL = "https://aa-mods.replit.app";
+const BASE_ICON_URL = "https://aa-mods.vercel.app";
 
 type DownloadButton = {
   label: string;
