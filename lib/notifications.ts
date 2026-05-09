@@ -9,7 +9,7 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge: true,
+    shouldSetBadge: false,
     shouldShowBanner: true,
     shouldShowList: true,
   }),
@@ -29,13 +29,15 @@ export async function setupPushNotifications(): Promise<string | null> {
         sound: "default",
         enableVibrate: true,
         showBadge: true,
-      });
+      }).catch(() => {});
+
       await Notifications.setNotificationChannelAsync("aa-mods-general", {
         name: "General",
         description: "General AA Mods notifications",
         importance: Notifications.AndroidImportance.DEFAULT,
         lightColor: "#22d3ee",
-      });
+      }).catch(() => {});
+
       await Notifications.setNotificationChannelAsync("aa-mods-critical", {
         name: "Critical Alerts",
         description: "Important announcements and mandatory updates",
@@ -45,7 +47,7 @@ export async function setupPushNotifications(): Promise<string | null> {
         sound: "default",
         enableVibrate: true,
         showBadge: true,
-      });
+      }).catch(() => {});
     }
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -59,7 +61,6 @@ export async function setupPushNotifications(): Promise<string | null> {
     logNotificationPermission(finalStatus);
 
     if (finalStatus !== "granted") {
-      console.log("[Notifications] Permission denied by user");
       return null;
     }
 
@@ -68,9 +69,12 @@ export async function setupPushNotifications(): Promise<string | null> {
       Constants.easConfig?.projectId ??
       undefined;
 
-    const token = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined,
-    ).catch(() => null);
+    if (!projectId) {
+      console.warn("[Notifications] No EAS project ID configured — push tokens unavailable until you run: eas init");
+      return null;
+    }
+
+    const token = await Notifications.getExpoPushTokenAsync({ projectId }).catch(() => null);
 
     if (token?.data) {
       const tokenRef = ref(database, "push_tokens");

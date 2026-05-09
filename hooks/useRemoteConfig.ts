@@ -109,13 +109,12 @@ export function useRemoteConfig() {
             if (isMounted.current) setLoaded(true);
           }
         },
-        (err) => {
-          console.warn("[RemoteConfig] Error:", err.message);
+        () => {
+          // Firebase permission denied — use defaults silently
           if (isMounted.current) setLoaded(true);
         },
       );
-    } catch (setupErr) {
-      console.warn("[RemoteConfig] Setup error:", setupErr);
+    } catch {
       if (isMounted.current) setLoaded(true);
     }
 

@@ -5,13 +5,17 @@ import { database } from "./firebase";
 type EventParams = Record<string, string | number | boolean>;
 
 function logEvent(event: string, params?: EventParams): void {
-  const eventRef = ref(database, "analytics/events");
-  push(eventRef, {
-    event,
-    params: params ?? {},
-    timestamp: new Date().toISOString(),
-    platform: Platform.OS,
-  }).catch(() => {});
+  try {
+    const eventRef = ref(database, "analytics/events");
+    push(eventRef, {
+      event,
+      params: params ?? {},
+      timestamp: new Date().toISOString(),
+      platform: Platform.OS,
+    }).catch(() => {});
+  } catch {
+    // Analytics write silently ignored if Firebase rules deny access
+  }
 }
 
 export function logAppOpen(): void {

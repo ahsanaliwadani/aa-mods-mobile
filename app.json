@@ -15,7 +15,11 @@
     },
     "updates": {
       "enabled": false,
-      "checkAutomatically": "NEVER"
+      "checkAutomatically": "NEVER",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     },
     "ios": {
       "supportsTablet": false,
@@ -47,7 +51,7 @@
       [
         "expo-router",
         {
-          "origin": "https://replit.com/"
+          "origin": "https://aa-mods.replit.app"
         }
       ],
       "expo-font",
@@ -67,6 +71,11 @@
         }
       ]
     ],
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

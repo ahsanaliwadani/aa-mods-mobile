@@ -61,16 +61,16 @@ export function useAppUpdateChecker() {
             const mandatory = Boolean(data.mandatory);
             const hasUpdate = compareVersions(latestVersion, CURRENT_VERSION) > 0;
             setUpdateInfo({ latestVersion, downloadUrl, releaseNotes, mandatory, hasUpdate });
-          } catch (parseErr) {
-            console.warn("[UpdateChecker] Parse error:", parseErr);
+          } catch {
+            // parse error — ignore silently
           }
         },
-        (err) => {
-          console.warn("[UpdateChecker] Error:", err.message);
+        () => {
+          // Firebase permission denied — no update info available, ignore silently
         },
       );
-    } catch (setupErr) {
-      console.warn("[UpdateChecker] Setup error:", setupErr);
+    } catch {
+      // setup error — ignore silently
     }
 
     return () => {

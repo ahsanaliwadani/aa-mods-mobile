@@ -1,4 +1,4 @@
-import { Alert, Platform } from "react-native";
+import { Platform } from "react-native";
 import { OneSignal, LogLevel } from "react-native-onesignal";
 
 const APP_ID = "c0dd2a7a-37c7-450e-89a0-08c8ec3f446d";
@@ -13,44 +13,10 @@ export function initializeOneSignal(): void {
   try {
     OneSignal.Debug.setLogLevel(LogLevel.Warn);
     OneSignal.initialize(APP_ID);
-
-    OneSignal.User.pushSubscription.addEventListener("change", (event) => {
-      try {
-        const prev = event.previous?.id;
-        const curr = event.current?.id;
-        if (!prev && curr) {
-          showWelcomeDialog();
-        }
-      } catch (err) {
-        console.warn("[OneSignal] Subscription change handler error:", err);
-      }
-    });
+    OneSignal.Notifications.requestPermission(true);
   } catch (err) {
     console.warn("[OneSignal] Initialization error:", err);
   }
-}
-
-function showWelcomeDialog(): void {
-  Alert.alert(
-    "Your OneSignal integration is complete!",
-    "Click the button below to trigger your first journey via an in-app message.",
-    [
-      {
-        text: "Trigger your first journey",
-        onPress: () => {
-          try {
-            OneSignal.InAppMessages.addTrigger(
-              "ai_implementation_campaign_email_journey",
-              "true",
-            );
-          } catch (err) {
-            console.warn("[OneSignal] Trigger error:", err);
-          }
-        },
-      },
-    ],
-    { cancelable: false },
-  );
 }
 
 export function loginUser(externalId: string): void {
