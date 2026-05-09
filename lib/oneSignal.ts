@@ -14,7 +14,6 @@ export function initializeOneSignal(): void {
     OneSignal.Debug.setLogLevel(LogLevel.Warn);
     OneSignal.initialize(APP_ID);
 
-    // Register push subscription observer — show welcome dialog on first registration
     OneSignal.User.pushSubscription.addEventListener("change", (event) => {
       try {
         const prev = event.previous?.id;
