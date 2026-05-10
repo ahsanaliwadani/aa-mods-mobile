@@ -92,7 +92,9 @@ function RootLayoutNav() {
   useEffect(() => {
     logAppOpen();
 
-    setInboxCallback(addItem);
+    if (typeof setInboxCallback === "function") {
+      setInboxCallback(addItem);
+    }
 
     if (!isExpoGo && Platform.OS !== "web") {
       const Notifications = require("expo-notifications");

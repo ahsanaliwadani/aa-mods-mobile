@@ -26,4 +26,17 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
+// Disable bundle caching in dev so browsers always get fresh bundles
+config.server = config.server || {};
+config.server.enhanceMiddleware = (middleware) => {
+  return (req, res, next) => {
+    if (req.url && req.url.includes(".bundle")) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    }
+    return middleware(req, res, next);
+  };
+};
+
 module.exports = config;
