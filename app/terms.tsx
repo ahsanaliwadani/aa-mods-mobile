@@ -51,7 +51,7 @@ const SECTIONS = [
   {
     icon: "document-text-outline",
     title: "GOVERNING LAW",
-    body: `These Terms of Service shall be governed by and construed in accordance with applicable laws. Any disputes arising from these terms shall be resolved through good-faith negotiation.\n\nIf you have questions about these terms, please contact us before taking legal action.\n\nLast updated: May 2025`,
+    body: `These Terms of Service shall be governed by and construed in accordance with applicable laws. Any disputes arising from these terms shall be resolved through good-faith negotiation.\n\nIf you have questions about these terms, please contact us before taking legal action.\n\nLast updated: May 2026`,
   },
 ];
 

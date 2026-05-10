@@ -46,7 +46,7 @@ const SECTIONS = [
   {
     icon: "refresh-outline",
     title: "POLICY UPDATES",
-    body: `This Privacy Policy may be updated periodically. We will notify users of significant changes via in-app announcements. Continued use of the app after changes constitutes acceptance of the updated policy.\n\nLast updated: May 2025`,
+    body: `This Privacy Policy may be updated periodically. We will notify users of significant changes via in-app announcements. Continued use of the app after changes constitutes acceptance of the updated policy.\n\nLast updated: May 2026`,
   },
 ];
 

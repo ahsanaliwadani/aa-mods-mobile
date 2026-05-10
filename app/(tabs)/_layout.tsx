@@ -8,6 +8,7 @@ import type { StyleProp, ViewStyle } from "react-native";
 import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
+import { useNotificationInbox } from "@/contexts/NotificationInboxContext";
 import { GlobalDownloadBar } from "@/components/GlobalDownloadBar";
 import { useUpdateNotifications } from "@/hooks/useUpdateNotifications";
 import { useInstalledAppChecker } from "@/hooks/useInstalledAppChecker";
@@ -53,6 +54,7 @@ export default function TabLayout() {
   const isDark = true;
   const { newCount, apps } = useFirebaseCatalog();
   const dm = useDownloadManager();
+  const { unreadCount } = useNotificationInbox();
   const router = useRouter();
   useUpdateNotifications();
   useInstalledAppChecker(apps);
@@ -151,7 +153,10 @@ export default function TabLayout() {
           options={{
             title: "Settings",
             tabBarIcon: ({ color, focused }) => (
-              <Ionicons name={focused ? "settings" : "settings-outline"} size={22} color={color} />
+              <View>
+                <Ionicons name={focused ? "settings" : "settings-outline"} size={22} color={color} />
+                <Badge count={unreadCount} color="#22d3ee" />
+              </View>
             ),
           }}
         />

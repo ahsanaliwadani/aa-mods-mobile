@@ -25,6 +25,7 @@ import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { AppIcon } from "@/components/AppIcon";
 import { haptics, refreshHapticsPreference } from "@/lib/haptics";
 import { logScreenView, logSettingChanged, logCacheCleared, logAllDataReset, logExternalLinkOpened } from "@/lib/analytics";
+import { useNotificationInbox } from "@/contexts/NotificationInboxContext";
 
 const PREFS_KEY = "@aa_mods_prefs_v1";
 const AA_MODS_DIR = FileSystem.documentDirectory ? `${FileSystem.documentDirectory}AAMods/` : null;
@@ -214,6 +215,7 @@ const ALL_STORAGE_KEYS = [
   "@aa_mods_installed_apps_v1",
   "@aa_mods_downloads_v1",
   "@aa_mods_dismissed_update_version",
+  "@aa_mods_notif_inbox_v1",
 ];
 
 export default function SettingsScreen() {
@@ -222,6 +224,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
+  const { unreadCount: inboxUnread, clearAll: clearInbox } = useNotificationInbox();
   const { apps, categories, connected, lastUpdated } = useFirebaseCatalog();
   const { config } = useRemoteConfig();
   const { favorites, toggleFavorite, clearFavorites, recentSlugs, clearRecentlyViewed } = useUserData();
@@ -333,6 +336,7 @@ export default function SettingsScreen() {
 
               clearFavorites();
               clearRecentlyViewed();
+              clearInbox();
               setPrefs(DEFAULT_PREFS);
               await refreshCacheSize();
               logAllDataReset();
@@ -516,6 +520,22 @@ export default function SettingsScreen() {
       <View style={sStyles.group}>
         <SectionTitle title="Notifications" />
         <View style={sStyles.rowGroup}>
+          <SettingRow
+            icon="mail-open-outline"
+            iconColor="#22d3ee"
+            label="Notification Inbox"
+            sub={inboxUnread > 0 ? `${inboxUnread} unread message${inboxUnread !== 1 ? "s" : ""}` : "All caught up"}
+            onPress={() => { haptics.selection(); router.push("/inbox"); }}
+            trailing={
+              inboxUnread > 0 ? (
+                <View style={[sStyles.inboxBadge, { backgroundColor: "#22d3ee" }]}>
+                  <Text style={sStyles.inboxBadgeText}>{inboxUnread > 99 ? "99+" : inboxUnread}</Text>
+                </View>
+              ) : (
+                <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+              )
+            }
+          />
           <SettingRow
             icon="notifications-outline"
             iconColor="#fbbf24"
@@ -793,4 +813,6 @@ const sStyles = StyleSheet.create({
   infoLabel: { fontSize: 13, fontFamily: "Inter_400Regular" },
   infoValue: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   aboutFooter: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", padding: 14, lineHeight: 17 },
+  inboxBadge: { borderRadius: 10, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
+  inboxBadgeText: { color: "#04131b", fontSize: 10, fontWeight: "800", fontFamily: "Inter_700Bold" },
 });

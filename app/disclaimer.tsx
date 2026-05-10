@@ -107,7 +107,7 @@ export default function DisclaimerScreen() {
         </View>
 
         <Text style={[styles.footer, { color: colors.mutedForeground }]}>
-          Last updated: May 2025 · AA Mods Team
+          Last updated: May 2026 · AA Mods Team
         </Text>
       </ScrollView>
     </View>

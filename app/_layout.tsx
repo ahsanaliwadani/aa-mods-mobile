@@ -20,10 +20,12 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { UserDataProvider } from "@/contexts/UserDataContext";
 import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
+import { NotificationInboxProvider, useNotificationInbox } from "@/contexts/NotificationInboxContext";
+import type { NotifType } from "@/contexts/NotificationInboxContext";
 import { setupPushNotifications } from "@/lib/notifications";
 import { logAppOpen } from "@/lib/analytics";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
-import { initializeOneSignal } from "@/lib/oneSignal";
+import { initializeOneSignal, setInboxCallback } from "@/lib/oneSignal";
 
 const GestureHandlerRootView = _GestureHandlerRootView as unknown as React.ComponentType<{
   style?: object;
@@ -34,10 +36,8 @@ const isExpoGo = Constants.appOwnership === "expo";
 
 SplashScreen.preventAutoHideAsync();
 
-// Initialize OneSignal early (before any render) for background notification support
 initializeOneSignal();
 
-// Track app insights (web-safe, no-op on unsupported platforms)
 if (Platform.OS !== "web") {
   try {
     const { Insights } = require("expo-insights");
@@ -72,28 +72,47 @@ const KeyboardWrapper: React.FC<WrapperProps> =
 
 type NotifSubscription = { remove: () => void } | null;
 
+function getLocalNotifType(data: Record<string, unknown>): NotifType {
+  const t = data?.type as string | undefined;
+  if (t === "download_start") return "download_start";
+  if (t === "download_done") return "download_done";
+  if (t === "download_error") return "download_error";
+  if (t === "update_available") return "update_available";
+  if (t === "new_app") return "new_app";
+  if (t === "installed_update") return "installed_update";
+  return "general";
+}
+
 function RootLayoutNav() {
   const notifListener = useRef<NotifSubscription>(null);
   const responseListener = useRef<NotifSubscription>(null);
   const { config, loaded } = useRemoteConfig();
+  const { addItem } = useNotificationInbox();
 
   useEffect(() => {
     logAppOpen();
 
+    setInboxCallback(addItem);
+
     if (!isExpoGo && Platform.OS !== "web") {
       const Notifications = require("expo-notifications");
 
-      // Set up push notification channels and request permission
       setupPushNotifications().catch(() => {});
 
-      // Log foreground notifications
       notifListener.current = Notifications.addNotificationReceivedListener(
-        (n: { request: { content: { title: string } } }) => {
-          console.log("[Notification received]", n.request.content.title);
+        (n: { request: { content: { title?: string; body?: string; data: Record<string, unknown> } } }) => {
+          const { title, body, data } = n.request.content;
+          if (title) {
+            addItem({
+              title: title ?? "",
+              body: body ?? "",
+              type: getLocalNotifType(data ?? {}),
+              data: data as Record<string, unknown>,
+            });
+          }
         },
       );
 
-      // Handle notification tap — deep link into the app
       responseListener.current = Notifications.addNotificationResponseReceivedListener(
         (r: { notification: { request: { content: { data: Record<string, unknown> } } } }) => {
           const data = r.notification.request.content.data;
@@ -107,10 +126,11 @@ function RootLayoutNav() {
     }
 
     return () => {
+      setInboxCallback(null);
       notifListener.current?.remove();
       responseListener.current?.remove();
     };
-  }, []);
+  }, [addItem]);
 
   if (loaded && config.maintenanceMode) {
     return <MaintenanceScreen message={config.maintenanceMessage} />;
@@ -120,6 +140,7 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="app/[slug]" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="inbox" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="about" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="privacy" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="terms" options={{ headerShown: false, animation: "slide_from_right" }} />
@@ -150,11 +171,13 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <DownloadManagerProvider>
             <UserDataProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <KeyboardWrapper>
-                  <RootLayoutNav />
-                </KeyboardWrapper>
-              </GestureHandlerRootView>
+              <NotificationInboxProvider>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <KeyboardWrapper>
+                    <RootLayoutNav />
+                  </KeyboardWrapper>
+                </GestureHandlerRootView>
+              </NotificationInboxProvider>
             </UserDataProvider>
           </DownloadManagerProvider>
         </QueryClientProvider>
