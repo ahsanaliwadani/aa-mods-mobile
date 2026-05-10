@@ -93,9 +93,8 @@ function RootLayoutNav() {
   const { addItem } = useNotificationInbox();
   const dm = useDownloadManager();
 
-  // Track download phase changes → add to inbox directly (covers web + ExpoGo where local notifs can't fire)
+  // Track download phase changes → always add to inbox (and also fire local push notification separately)
   useEffect(() => {
-    if (canLocalNotify) return; // on native builds, expo-notifications listener handles this
     const newPhases = new Map<string, string>();
     for (const [slug, entry] of dm.downloads) {
       newPhases.set(slug, entry.phase);

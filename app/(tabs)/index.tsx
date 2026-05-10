@@ -404,11 +404,11 @@ export default function HomeScreen() {
 
   const { apps, categories, loading, connected, lastUpdated } = useFirebaseCatalog();
   const { updateInfo, shouldShow, isMandatory, dismiss } = useAppUpdateChecker();
-  const { appsWithUpdates } = useInstalledAppUpdates(apps);
+  const { addItem: addInboxItem, unreadCount: inboxUnread } = useNotificationInbox();
+  const { appsWithUpdates } = useInstalledAppUpdates(apps, addInboxItem);
   const { config } = useRemoteConfig();
   const { isFavorite, toggleFavorite } = useUserData();
   const dm = useDownloadManager();
-  const { unreadCount: inboxUnread } = useNotificationInbox();
 
   const effectiveMandatory = isMandatory || config.updateBannerMandatory;
   const shouldShowBanner = shouldShow && config.updateBannerEnabled;
@@ -532,29 +532,27 @@ export default function HomeScreen() {
             <View>
               <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
               <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
+              {lastUpdatedStr ? (
+                <Text style={[styles.updatedAt, { color: colors.mutedForeground }]}>Synced {lastUpdatedStr}</Text>
+              ) : null}
             </View>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {lastUpdatedStr ? (
-              <Text style={[styles.updatedAt, { color: colors.mutedForeground }]}>Updated {lastUpdatedStr}</Text>
-            ) : null}
-            <Pressable
-              onPress={() => { haptics.light(); router.push("/inbox"); }}
-              hitSlop={10}
-              style={({ pressed }) => [styles.bellBtn, { opacity: pressed ? 0.7 : 1 }]}
-            >
-              <Ionicons
-                name={inboxUnread > 0 ? "notifications" : "notifications-outline"}
-                size={24}
-                color={inboxUnread > 0 ? "#22d3ee" : colors.mutedForeground}
-              />
-              {inboxUnread > 0 && (
-                <View style={[styles.bellBadge, { backgroundColor: "#22d3ee" }]}>
-                  <Text style={styles.bellBadgeText}>{inboxUnread > 99 ? "99+" : inboxUnread}</Text>
-                </View>
-              )}
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={() => { haptics.light(); router.push("/inbox"); }}
+            hitSlop={12}
+            style={({ pressed }) => [styles.bellBtn, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Ionicons
+              name={inboxUnread > 0 ? "notifications" : "notifications-outline"}
+              size={26}
+              color={inboxUnread > 0 ? "#22d3ee" : colors.mutedForeground}
+            />
+            {inboxUnread > 0 && (
+              <View style={[styles.bellBadge, { backgroundColor: "#22d3ee" }]}>
+                <Text style={styles.bellBadgeText}>{inboxUnread > 99 ? "99+" : inboxUnread}</Text>
+              </View>
+            )}
+          </Pressable>
         </View>
 
         <ScrollView

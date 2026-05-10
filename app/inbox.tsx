@@ -27,7 +27,9 @@ function timeAgo(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
-function typeIcon(type: NotifType): { name: string; color: string; bg: string } {
+type IconConfig = { name: string; color: string; bg: string };
+
+function typeIcon(type: NotifType): IconConfig {
   switch (type) {
     case "download_done":
       return { name: "checkmark-circle", color: "#00e673", bg: "rgba(0,230,115,0.12)" };
@@ -46,35 +48,57 @@ function typeIcon(type: NotifType): { name: string; color: string; bg: string } 
   }
 }
 
+function typeActionLabel(type: NotifType): string {
+  switch (type) {
+    case "download_done":
+    case "download_start":
+    case "download_error":
+      return "View Downloads";
+    case "update_available":
+    case "installed_update":
+    case "new_app":
+      return "View Updates";
+    default:
+      return "";
+  }
+}
+
 function NotifCard({
   item,
-  onRead,
+  onPress,
   onRemove,
 }: {
   item: NotificationInboxItem;
-  onRead: (id: string) => void;
+  onPress: (item: NotificationInboxItem) => void;
   onRemove: (id: string) => void;
 }) {
   const colors = useColors();
   const { name, color, bg } = typeIcon(item.type);
+  const actionLabel = typeActionLabel(item.type);
+  const data = item.data as Record<string, unknown> | undefined;
+  const hasNavTarget = data?.slug || actionLabel;
 
   return (
     <Pressable
-      onPress={() => { haptics.light(); onRead(item.id); }}
+      onPress={() => onPress(item)}
       style={({ pressed }) => [
         iStyles.card,
         {
-          backgroundColor: item.read ? colors.card : `${colors.card}`,
-          borderColor: item.read ? colors.border : color + "44",
+          backgroundColor: item.read ? colors.card : colors.card,
+          borderColor: item.read ? colors.border : color + "55",
+          borderLeftColor: item.read ? colors.border : color,
+          borderLeftWidth: item.read ? 1 : 3,
           opacity: pressed ? 0.85 : 1,
         },
       ]}
     >
       {!item.read && <View style={[iStyles.unreadDot, { backgroundColor: color }]} />}
+
       <View style={[iStyles.iconWrap, { backgroundColor: bg }]}>
         <Ionicons name={name as "apps"} size={20} color={color} />
       </View>
-      <View style={{ flex: 1, gap: 3 }}>
+
+      <View style={{ flex: 1, gap: 4 }}>
         <View style={iStyles.cardTopRow}>
           <Text
             style={[
@@ -89,10 +113,19 @@ function NotifCard({
             {timeAgo(item.timestamp)}
           </Text>
         </View>
-        <Text style={[iStyles.cardBody, { color: colors.mutedForeground }]} numberOfLines={2}>
+        <Text style={[iStyles.cardBody, { color: colors.mutedForeground }]} numberOfLines={3}>
           {item.body}
         </Text>
+        {hasNavTarget && !item.read && (
+          <View style={iStyles.tapHint}>
+            <Ionicons name="arrow-forward-circle-outline" size={12} color={color} />
+            <Text style={[iStyles.tapHintText, { color }]}>
+              {data?.slug ? "Tap to view app" : actionLabel}
+            </Text>
+          </View>
+        )}
       </View>
+
       <Pressable
         onPress={() => { haptics.selection(); onRemove(item.id); }}
         hitSlop={12}
@@ -112,15 +145,39 @@ export default function InboxScreen() {
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
   const { items, unreadCount, markRead, markAllRead, removeItem, clearAll } = useNotificationInbox();
 
-  const handleRemove = useCallback(
-    (id: string) => { removeItem(id); },
-    [removeItem],
+  // Mark all read when leaving screen after a short delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (unreadCount > 0) markAllRead();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [unreadCount, markAllRead]);
+
+  const handlePress = useCallback(
+    (item: NotificationInboxItem) => {
+      haptics.light();
+      markRead(item.id);
+      const data = item.data as Record<string, unknown> | undefined;
+      if (data?.slug && typeof data.slug === "string") {
+        router.push(`/app/${data.slug}`);
+      } else if (
+        item.type === "download_done" ||
+        item.type === "download_error" ||
+        item.type === "download_start"
+      ) {
+        router.push("/(tabs)/downloads");
+      } else if (
+        item.type === "update_available" ||
+        item.type === "new_app" ||
+        item.type === "installed_update"
+      ) {
+        router.push("/(tabs)/updates");
+      }
+    },
+    [markRead, router],
   );
 
-  const handleRead = useCallback(
-    (id: string) => { markRead(id); },
-    [markRead],
-  );
+  const handleRemove = useCallback((id: string) => removeItem(id), [removeItem]);
 
   const handleClearAll = () => {
     Alert.alert(
@@ -139,15 +196,16 @@ export default function InboxScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: NotificationInboxItem }) => (
-      <NotifCard item={item} onRead={handleRead} onRemove={handleRemove} />
+      <NotifCard item={item} onPress={handlePress} onRemove={handleRemove} />
     ),
-    [handleRead, handleRemove],
+    [handlePress, handleRemove],
   );
 
   const keyExtractor = useCallback((item: NotificationInboxItem) => item.id, []);
 
   return (
     <View style={[iStyles.container, { backgroundColor: colors.background }]}>
+      {/* Header */}
       <View
         style={[
           iStyles.header,
@@ -161,10 +219,10 @@ export default function InboxScreen() {
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
         </Pressable>
         <View style={iStyles.headerCenter}>
-          <Text style={[iStyles.headerTitle, { color: colors.foreground }]}>Notification Inbox</Text>
+          <Text style={[iStyles.headerTitle, { color: colors.foreground }]}>Notifications</Text>
           {unreadCount > 0 && (
-            <View style={[iStyles.headerBadge, { backgroundColor: colors.primary }]}>
-              <Text style={iStyles.headerBadgeText}>{unreadCount}</Text>
+            <View style={[iStyles.headerBadge, { backgroundColor: "#22d3ee" }]}>
+              <Text style={iStyles.headerBadgeText}>{unreadCount} new</Text>
             </View>
           )}
         </View>
@@ -210,16 +268,23 @@ export default function InboxScreen() {
             </View>
             <Text style={[iStyles.emptyTitle, { color: colors.foreground }]}>No notifications yet</Text>
             <Text style={[iStyles.emptyBody, { color: colors.mutedForeground }]}>
-              Push notifications from AA Mods and download alerts will appear here.
+              Download alerts, new apps, and update notifications will appear here in real-time.
             </Text>
           </View>
         }
         ListHeaderComponent={
           items.length > 0 ? (
-            <Text style={[iStyles.listHeader, { color: colors.mutedForeground }]}>
-              {items.length} notification{items.length !== 1 ? "s" : ""}
-              {unreadCount > 0 ? ` · ${unreadCount} unread` : " · all read"}
-            </Text>
+            <View style={iStyles.listHeaderRow}>
+              <Text style={[iStyles.listHeaderText, { color: colors.mutedForeground }]}>
+                {items.length} notification{items.length !== 1 ? "s" : ""}
+                {unreadCount > 0 ? ` · ${unreadCount} unread` : " · all read"}
+              </Text>
+              {unreadCount > 0 && (
+                <Text style={[iStyles.readHint, { color: colors.mutedForeground }]}>
+                  Tap to open · auto-read in 3s
+                </Text>
+              )}
+            </View>
           ) : null
         }
         ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
@@ -234,27 +299,28 @@ const iStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     gap: 8,
   },
   backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
-  headerTitle: { fontSize: 17, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  headerTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Inter_700Bold" },
   headerBadge: {
     borderRadius: 8,
-    minWidth: 18,
-    height: 18,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
   },
-  headerBadgeText: { color: "#04131b", fontSize: 10, fontWeight: "800", fontFamily: "Inter_700Bold" },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 12 },
+  headerBadgeText: { color: "#04131b", fontSize: 11, fontWeight: "800", fontFamily: "Inter_700Bold" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 14 },
   listContent: { padding: 16 },
   emptyContainer: { flex: 1, justifyContent: "center" },
-  listHeader: { fontSize: 12, fontFamily: "Inter_400Regular", marginBottom: 12 },
-  emptyWrap: { alignItems: "center", gap: 14, paddingVertical: 48, paddingHorizontal: 32 },
+  listHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  listHeaderText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  readHint: { fontSize: 11, fontFamily: "Inter_400Regular", fontStyle: "italic" },
+  emptyWrap: { alignItems: "center", gap: 14, paddingVertical: 60, paddingHorizontal: 32 },
   emptyIconWrap: {
     width: 80,
     height: 80,
@@ -283,16 +349,19 @@ const iStyles = StyleSheet.create({
     borderRadius: 3,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    marginTop: 1,
   },
   cardTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  cardTitle: { flex: 1, fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  cardTitle: { flex: 1, fontSize: 14, fontWeight: "700", fontFamily: "Inter_700Bold" },
   cardTime: { fontSize: 11, fontFamily: "Inter_400Regular", flexShrink: 0 },
   cardBody: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 19 },
-  deleteBtn: { alignSelf: "flex-start", paddingTop: 2 },
+  tapHint: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  tapHintText: { fontSize: 11, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  deleteBtn: { alignSelf: "flex-start", paddingTop: 2, paddingLeft: 4 },
 });

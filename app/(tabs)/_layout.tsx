@@ -54,9 +54,9 @@ export default function TabLayout() {
   const isDark = true;
   const { newCount, apps } = useFirebaseCatalog();
   const dm = useDownloadManager();
-  const { unreadCount } = useNotificationInbox();
+  const { unreadCount, addItem } = useNotificationInbox();
   const router = useRouter();
-  useUpdateNotifications();
+  useUpdateNotifications(addItem);
   useInstalledAppChecker(apps);
 
   const activeDownloads = Array.from(dm.downloads.values()).filter(

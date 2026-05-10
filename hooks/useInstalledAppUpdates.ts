@@ -4,9 +4,12 @@ import { Platform } from "react-native";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { notifyInstalledAppsUpdated } from "@/lib/localNotifications";
 import type { LiveStoreCatalogApp } from "@/hooks/useFirebaseCatalog";
+import type { NotificationInboxItem } from "@/contexts/NotificationInboxContext";
 
 const PREFS_KEY = "@aa_mods_prefs_v1";
 const NOTIFIED_VERSIONS_KEY = "@aa_mods_installed_update_notified_v1";
+
+type AddItemFn = (item: Omit<NotificationInboxItem, "id" | "timestamp" | "read">) => void;
 
 async function notificationsEnabled(): Promise<boolean> {
   try {
@@ -19,7 +22,7 @@ async function notificationsEnabled(): Promise<boolean> {
   }
 }
 
-export function useInstalledAppUpdates(apps: LiveStoreCatalogApp[]) {
+export function useInstalledAppUpdates(apps: LiveStoreCatalogApp[], addToInbox?: AddItemFn) {
   const dm = useDownloadManager();
   const notifiedRef = useRef<Record<string, string>>({});
   const loadedRef = useRef(false);
@@ -38,7 +41,6 @@ export function useInstalledAppUpdates(apps: LiveStoreCatalogApp[]) {
   }, [apps, dm]);
 
   useEffect(() => {
-    if (Platform.OS === "web") return;
     if (!loadedRef.current) return;
     if (appsWithUpdates.length === 0) return;
 
@@ -49,14 +51,39 @@ export function useInstalledAppUpdates(apps: LiveStoreCatalogApp[]) {
 
     notificationsEnabled().then((enabled) => {
       if (!enabled) return;
-      notifyInstalledAppsUpdated(newlyUpdated.map((a) => a.name), newlyUpdated.length).catch(() => {});
+
+      // Fire local push notification on native
+      if (Platform.OS !== "web") {
+        notifyInstalledAppsUpdated(newlyUpdated.map((a) => a.name), newlyUpdated.length).catch(() => {});
+      }
+
+      // Always add to in-app inbox
+      if (addToInbox) {
+        const count = newlyUpdated.length;
+        const names = newlyUpdated.map((a) => a.name);
+        const title = count === 1 ? "App Update Available" : `${count} Apps Need Updates`;
+        const body =
+          count === 1
+            ? `${names[0]} has a new version — tap to update now.`
+            : `${names.slice(0, 2).join(", ")}${count > 2 ? ` +${count - 2} more` : ""} have new versions available.`;
+        addToInbox({
+          title,
+          body,
+          type: "installed_update",
+          data: {
+            slugs: newlyUpdated.map((a) => a.slug),
+            slug: newlyUpdated.length === 1 ? newlyUpdated[0].slug : undefined,
+            count,
+          },
+        });
+      }
     });
 
     const next = { ...notifiedRef.current };
     for (const app of newlyUpdated) next[app.slug] = app.version;
     notifiedRef.current = next;
     AsyncStorage.setItem(NOTIFIED_VERSIONS_KEY, JSON.stringify(next)).catch(() => {});
-  }, [appsWithUpdates]);
+  }, [appsWithUpdates, addToInbox]);
 
   return { appsWithUpdates };
 }
