@@ -480,49 +480,10 @@ export default function AppDetailScreen() {
               : "Secure download via AA Mods verified link"}
           </Text>
 
-          {hasMultipleDownloads ? (
-            <View style={{ gap: 10, marginTop: 12 }}>
-              {app.downloadButtons!.map((btn, idx) => (
-                <Pressable
-                  key={idx}
-                  testID={idx === 0 ? "download-button" : "download-button-secondary"}
-                  onPress={() => handleDownload(btn.link, btn.label)}
-                  style={({ pressed }) =>
-                    idx === 0
-                      ? [styles.primaryDownloadBtn, {
-                          backgroundColor: hasUpdate ? "#fbbf24" : colors.primary,
-                          opacity: pressed ? 0.85 : 1,
-                          transform: [{ scale: pressed ? 0.98 : 1 }],
-                        }]
-                      : [styles.secondaryDownloadBtn, { backgroundColor: "rgba(34,211,238,0.06)", borderColor: "rgba(34,211,238,0.3)", opacity: pressed ? 0.8 : 1 }]
-                  }
-                >
-                  <Ionicons
-                    name={hasUpdate ? "arrow-up-circle" : idx === 0 ? "download" : "cloud-download-outline"}
-                    size={idx === 0 ? 20 : 17}
-                    color={idx === 0 ? (hasUpdate ? "#000" : colors.primaryForeground) : colors.accent}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={idx === 0
-                      ? [styles.primaryDownloadText, { color: hasUpdate ? "#000" : colors.primaryForeground }]
-                      : [styles.secondaryDownloadText, { color: colors.accent }]}>
-                      {idx === 0
-                        ? (hasUpdate ? `Update to v${app.version}` : "Download APK")
-                        : "Download APK"}
-                    </Text>
-                    {btn.label ? (
-                      <Text style={[styles.btnLabelSub, { color: idx === 0 ? (hasUpdate ? "rgba(0,0,0,0.55)" : "rgba(4,19,27,0.7)") : colors.mutedForeground }]}>
-                        {btn.label}
-                      </Text>
-                    ) : null}
-                  </View>
-                  {idx > 0 && <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />}
-                </Pressable>
-              ))}
-            </View>
-          ) : primaryDownloadLink ? (
-            <View style={{ gap: 10, marginTop: 12 }}>
-              {isDownloading ? (
+          <View style={{ gap: 10, marginTop: 12 }}>
+            {/* Primary download button (directDownloadLink / downloadLink) */}
+            {primaryDownloadLink ? (
+              isDownloading ? (
                 <View style={[styles.primaryDownloadBtn, { backgroundColor: colors.secondary, borderColor: colors.border, borderWidth: 1 }]}>
                   <ActivityIndicator color={colors.primary} size="small" />
                   <Text style={[styles.primaryDownloadText, { color: colors.mutedForeground }]}>
@@ -532,28 +493,20 @@ export default function AppDetailScreen() {
               ) : downloadDone ? (
                 <Pressable
                   onPress={() => dlSheet.open(primaryDownloadLink, `Download ${app.name} APK`)}
-                  style={({ pressed }) => [
-                    styles.primaryDownloadBtn,
-                    { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
-                  ]}
+                  style={({ pressed }) => [styles.primaryDownloadBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
                 >
                   <Ionicons name="hardware-chip-outline" size={20} color={colors.primaryForeground} />
-                  <Text style={[styles.primaryDownloadText, { color: colors.primaryForeground }]}>
-                    Install Now
-                  </Text>
+                  <Text style={[styles.primaryDownloadText, { color: colors.primaryForeground }]}>Install Now</Text>
                 </Pressable>
               ) : (
                 <Pressable
                   testID="download-button"
                   onPress={() => handleDownload(primaryDownloadLink, `Download ${app.name} APK`)}
-                  style={({ pressed }) => [
-                    styles.primaryDownloadBtn,
-                    {
-                      backgroundColor: hasUpdate ? "#fbbf24" : colors.primary,
-                      opacity: pressed ? 0.85 : 1,
-                      transform: [{ scale: pressed ? 0.98 : 1 }],
-                    },
-                  ]}
+                  style={({ pressed }) => [styles.primaryDownloadBtn, {
+                    backgroundColor: hasUpdate ? "#fbbf24" : colors.primary,
+                    opacity: pressed ? 0.85 : 1,
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
+                  }]}
                 >
                   <Ionicons
                     name={hasUpdate ? "arrow-up-circle" : isInstalled ? "refresh-circle" : "download"}
@@ -561,23 +514,64 @@ export default function AppDetailScreen() {
                     color={hasUpdate ? "#000" : colors.primaryForeground}
                   />
                   <Text style={[styles.primaryDownloadText, { color: hasUpdate ? "#000" : colors.primaryForeground }]}>
-                    {hasUpdate
-                      ? `Update to v${app.version}`
-                      : isInstalled
-                      ? `Reinstall v${app.version}`
-                      : `Download ${app.name} APK`}
+                    {hasUpdate ? `Update to v${app.version}` : isInstalled ? `Reinstall v${app.version}` : `Download ${app.name} APK`}
                   </Text>
                 </Pressable>
-              )}
-            </View>
-          ) : (
-            <View style={[styles.noDownloadNotice, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-              <Ionicons name="alert-circle-outline" size={18} color={colors.mutedForeground} />
-              <Text style={[styles.noDownloadText, { color: colors.mutedForeground }]}>
-                Download link not available. Check back soon.
-              </Text>
-            </View>
-          )}
+              )
+            ) : null}
+
+            {/* Extra download variant buttons (from downloadButtons array) — styled by btn.style */}
+            {hasMultipleDownloads && app.downloadButtons!.map((btn, idx) => {
+              const isPrimary = btn.style === "primary";
+              return isPrimary ? (
+                <Pressable
+                  key={idx}
+                  testID={idx === 0 && !primaryDownloadLink ? "download-button" : `download-variant-${idx}`}
+                  onPress={() => handleDownload(btn.link, btn.label || `Download ${app.name} APK`)}
+                  style={({ pressed }) => [styles.primaryDownloadBtn, {
+                    backgroundColor: hasUpdate ? "#fbbf24" : colors.primary,
+                    opacity: pressed ? 0.85 : 1,
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
+                  }]}
+                >
+                  <Ionicons
+                    name={hasUpdate ? "arrow-up-circle" : "download"}
+                    size={20}
+                    color={hasUpdate ? "#000" : colors.primaryForeground}
+                  />
+                  <Text style={[styles.primaryDownloadText, { color: hasUpdate ? "#000" : colors.primaryForeground }]}>
+                    {btn.label || (hasUpdate ? `Update to v${app.version}` : "Download APK")}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  key={idx}
+                  onPress={() => handleDownload(btn.link, btn.label || "Download APK")}
+                  style={({ pressed }) => [styles.secondaryDownloadBtn, {
+                    backgroundColor: "rgba(34,211,238,0.06)",
+                    borderColor: "rgba(34,211,238,0.3)",
+                    opacity: pressed ? 0.8 : 1,
+                  }]}
+                >
+                  <Ionicons name="cloud-download-outline" size={17} color={colors.accent} />
+                  <Text style={[styles.secondaryDownloadText, { color: colors.accent, flex: 1 }]}>
+                    {btn.label || "Download APK"}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
+                </Pressable>
+              );
+            })}
+
+            {/* No download available */}
+            {!primaryDownloadLink && !hasMultipleDownloads && (
+              <View style={[styles.noDownloadNotice, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.mutedForeground} />
+                <Text style={[styles.noDownloadText, { color: colors.mutedForeground }]}>
+                  Download link not available. Check back soon.
+                </Text>
+              </View>
+            )}
+          </View>
 
           {/* Mirror links */}
           {mirrorLinks && mirrorLinks.length > 0 && (

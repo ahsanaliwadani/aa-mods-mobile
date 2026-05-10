@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getDatabase, ref, onValue } from "firebase/database";
+import { getAuth, signInAnonymously } from "firebase/auth";
 
 export const FIREBASE_CONFIG = {
   apiKey: "AIzaSyB42oKwcnidARF1csT-zBGB-1bsvck8A_8",
@@ -15,3 +16,14 @@ export const FIREBASE_CONFIG = {
 export const app = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApp();
 export const database = getDatabase(app);
 export { ref, onValue };
+
+export async function ensureAnonymousAuth(): Promise<void> {
+  try {
+    const auth = getAuth(app);
+    if (!auth.currentUser) {
+      await signInAnonymously(auth);
+    }
+  } catch {
+    // Auth optional — RTDB may allow public reads without auth
+  }
+}

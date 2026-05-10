@@ -7,6 +7,27 @@ import { startTrace } from "@/lib/firebasePerformance";
 
 const BASE_ICON_URL = "https://aa-mods.vercel.app";
 
+function toArray<T>(val: unknown): T[] | undefined {
+  if (val == null) return undefined;
+  if (Array.isArray(val)) {
+    const filtered = val.filter((v) => v != null);
+    return filtered.length > 0 ? (filtered as T[]) : undefined;
+  }
+  if (typeof val === "object") {
+    const obj = val as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    if (keys.length === 0) return undefined;
+    if (keys.every((k) => /^\d+$/.test(k))) {
+      const arr = keys
+        .sort((a, b) => parseInt(a) - parseInt(b))
+        .map((k) => obj[k])
+        .filter((v) => v != null);
+      return arr.length > 0 ? (arr as T[]) : undefined;
+    }
+  }
+  return undefined;
+}
+
 export type LiveStoreCatalogApp = StoreCatalogApp & {
   isNew: boolean;
   iconOverrideUri?: string;
@@ -59,13 +80,33 @@ function parseFirebaseApp(
   fallback?: StoreCatalogApp,
 ): LiveStoreCatalogApp {
   try {
-    const isoDate = (raw.lastUpdated as string) || (raw.updateDate as string) || fallback?.updateDate?.iso || "";
-    const displayDate = (raw.displayDate as string) || fallback?.updateDate?.display || isoDate;
+    const rawUpdateDate = raw.updateDate;
+    const updateDateIsObj = rawUpdateDate != null && typeof rawUpdateDate === "object" && !Array.isArray(rawUpdateDate);
+    const updateDateObj = updateDateIsObj ? (rawUpdateDate as Record<string, unknown>) : null;
+
+    const isoDate =
+      (raw.lastUpdated as string) ||
+      (raw.updatedAt as string) ||
+      (updateDateObj ? (updateDateObj.iso as string) : (rawUpdateDate as string)) ||
+      fallback?.updateDate?.iso ||
+      "";
+    const displayDate =
+      (raw.displayDate as string) ||
+      (updateDateObj ? (updateDateObj.display as string) : undefined) ||
+      fallback?.updateDate?.display ||
+      isoDate;
     const version = (raw.version as string) || fallback?.version || "1.0";
 
-    const downloadButtons = Array.isArray(raw.downloadButtons)
-      ? (raw.downloadButtons as StoreCatalogApp["downloadButtons"])
-      : fallback?.downloadButtons;
+    type DownloadButton = { label: string; link: string; style: string };
+    const firebaseDownloadButtons = toArray<DownloadButton>(raw.downloadButtons);
+    const downloadButtons = firebaseDownloadButtons ?? fallback?.downloadButtons;
+
+    // When Firebase explicitly provides downloadButtons, those ARE the source of truth.
+    // Don't fall back to the local directDownloadLink (it may be outdated).
+    const directDownloadLink = (raw.directDownloadLink as string) ||
+      (firebaseDownloadButtons ? undefined : fallback?.directDownloadLink);
+    const downloadLink = (raw.downloadLink as string) ||
+      (firebaseDownloadButtons ? undefined : fallback?.downloadLink);
 
     return {
       slug,
@@ -88,12 +129,12 @@ function parseFirebaseApp(
       iconType: fallback?.iconType || "default",
       iconImage: resolveIcon(raw, fallback?.iconImage),
       iconOverrideUri: resolveIconOverride(raw),
-      directDownloadLink: (raw.directDownloadLink as string) || fallback?.directDownloadLink,
-      downloadLink: (raw.downloadLink as string) || fallback?.downloadLink,
+      directDownloadLink,
+      downloadLink,
       downloadButtons,
       isNew: isNewApp(isoDate),
-      changelog: Array.isArray(raw.changelog) ? (raw.changelog as string[]) : undefined,
-      whatsNew: Array.isArray(raw.whatsNew) ? (raw.whatsNew as string[]) : undefined,
+      changelog: toArray<string>(raw.changelog),
+      whatsNew: toArray<string>(raw.whatsNew),
       packageName: (raw.packageName as string) || undefined,
     };
   } catch {

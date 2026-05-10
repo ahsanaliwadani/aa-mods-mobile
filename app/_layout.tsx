@@ -25,6 +25,7 @@ import type { NotifType } from "@/contexts/NotificationInboxContext";
 import { setupPushNotifications } from "@/lib/notifications";
 import { canLocalNotify } from "@/lib/localNotifications";
 import { logAppOpen } from "@/lib/analytics";
+import { ensureAnonymousAuth } from "@/lib/firebase";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { initializeOneSignal, setInboxCallback } from "@/lib/oneSignal";
@@ -183,6 +184,10 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  useEffect(() => {
+    ensureAnonymousAuth().catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
