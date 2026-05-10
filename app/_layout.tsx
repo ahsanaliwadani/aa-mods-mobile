@@ -23,8 +23,10 @@ import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
 import { NotificationInboxProvider, useNotificationInbox } from "@/contexts/NotificationInboxContext";
 import type { NotifType } from "@/contexts/NotificationInboxContext";
 import { setupPushNotifications } from "@/lib/notifications";
+import { canLocalNotify } from "@/lib/localNotifications";
 import { logAppOpen } from "@/lib/analytics";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
+import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { initializeOneSignal, setInboxCallback } from "@/lib/oneSignal";
 
 const GestureHandlerRootView = _GestureHandlerRootView as unknown as React.ComponentType<{
@@ -86,8 +88,29 @@ function getLocalNotifType(data: Record<string, unknown>): NotifType {
 function RootLayoutNav() {
   const notifListener = useRef<NotifSubscription>(null);
   const responseListener = useRef<NotifSubscription>(null);
+  const prevPhasesRef = useRef<Map<string, string>>(new Map());
   const { config, loaded } = useRemoteConfig();
   const { addItem } = useNotificationInbox();
+  const dm = useDownloadManager();
+
+  // Track download phase changes → add to inbox directly (covers web + ExpoGo where local notifs can't fire)
+  useEffect(() => {
+    if (canLocalNotify) return; // on native builds, expo-notifications listener handles this
+    const newPhases = new Map<string, string>();
+    for (const [slug, entry] of dm.downloads) {
+      newPhases.set(slug, entry.phase);
+      const prev = prevPhasesRef.current.get(slug);
+      if (prev === entry.phase) continue;
+      if (entry.phase === "downloading" && (prev === "idle" || prev === "resolving" || !prev)) {
+        addItem({ title: "Download Started", body: `Downloading ${entry.appName}…`, type: "download_start", data: { slug, appName: entry.appName } });
+      } else if (entry.phase === "done" && prev && prev !== "done") {
+        addItem({ title: "Download Complete ✓", body: `${entry.appName} is ready to install!`, type: "download_done", data: { slug, appName: entry.appName } });
+      } else if (entry.phase === "error" && prev && prev !== "error") {
+        addItem({ title: "Download Failed", body: `${entry.appName}: ${(entry.error ?? "Unknown error").slice(0, 100)}`, type: "download_error", data: { slug, appName: entry.appName } });
+      }
+    }
+    prevPhasesRef.current = newPhases;
+  }, [dm.downloads, addItem]);
 
   useEffect(() => {
     logAppOpen();

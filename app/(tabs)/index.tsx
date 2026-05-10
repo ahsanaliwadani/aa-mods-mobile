@@ -30,6 +30,7 @@ import { useInstalledAppUpdates } from "@/hooks/useInstalledAppUpdates";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useUserData } from "@/contexts/UserDataContext";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
+import { useNotificationInbox } from "@/contexts/NotificationInboxContext";
 import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 import {
   logScreenView,
@@ -407,6 +408,7 @@ export default function HomeScreen() {
   const { config } = useRemoteConfig();
   const { isFavorite, toggleFavorite } = useUserData();
   const dm = useDownloadManager();
+  const { unreadCount: inboxUnread } = useNotificationInbox();
 
   const effectiveMandatory = isMandatory || config.updateBannerMandatory;
   const shouldShowBanner = shouldShow && config.updateBannerEnabled;
@@ -532,11 +534,27 @@ export default function HomeScreen() {
               <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
             </View>
           </View>
-          {lastUpdatedStr ? (
-            <View style={{ alignItems: "flex-end", gap: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {lastUpdatedStr ? (
               <Text style={[styles.updatedAt, { color: colors.mutedForeground }]}>Updated {lastUpdatedStr}</Text>
-            </View>
-          ) : null}
+            ) : null}
+            <Pressable
+              onPress={() => { haptics.light(); router.push("/inbox"); }}
+              hitSlop={10}
+              style={({ pressed }) => [styles.bellBtn, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Ionicons
+                name={inboxUnread > 0 ? "notifications" : "notifications-outline"}
+                size={24}
+                color={inboxUnread > 0 ? "#22d3ee" : colors.mutedForeground}
+              />
+              {inboxUnread > 0 && (
+                <View style={[styles.bellBadge, { backgroundColor: "#22d3ee" }]}>
+                  <Text style={styles.bellBadgeText}>{inboxUnread > 99 ? "99+" : inboxUnread}</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
         </View>
 
         <ScrollView
@@ -741,4 +759,17 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 10 },
   emptyTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Inter_700Bold" },
   emptySubtitle: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  bellBtn: { position: "relative", width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  bellBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    borderRadius: 7,
+    minWidth: 15,
+    height: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: { color: "#04131b", fontSize: 8, fontWeight: "800", fontFamily: "Inter_700Bold" },
 });

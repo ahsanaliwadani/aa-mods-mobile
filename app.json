@@ -82,7 +82,7 @@
         {
           "mode": "development",
           "smallIcons": ["./assets/images/notification-icon.png"],
-          "largeIcons": ["./assets/images/icon.png"]
+          "largeIcons": ["./assets/images/notification-icon.png"]
         }
       ]
     ],
