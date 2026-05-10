@@ -126,14 +126,17 @@ function RootLayoutNav() {
       notifListener.current = Notifications.addNotificationReceivedListener(
         (n: { request: { content: { title?: string; body?: string; data: Record<string, unknown> } } }) => {
           const { title, body, data } = n.request.content;
-          if (title) {
-            addItem({
-              title: title ?? "",
-              body: body ?? "",
-              type: getLocalNotifType(data ?? {}),
-              data: data as Record<string, unknown>,
-            });
-          }
+          if (!title) return;
+          const type = getLocalNotifType(data ?? {});
+          // Download events are already added to inbox by the phase-tracking effect above.
+          // Skipping here prevents duplicate inbox entries on native builds.
+          if (type === "download_start" || type === "download_done" || type === "download_error") return;
+          addItem({
+            title,
+            body: body ?? "",
+            type,
+            data: data as Record<string, unknown>,
+          });
         },
       );
 

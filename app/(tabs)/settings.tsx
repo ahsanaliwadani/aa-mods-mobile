@@ -349,7 +349,7 @@ export default function SettingsScreen() {
         },
       ],
     );
-  }, [clearFavorites, clearRecentlyViewed, refreshCacheSize]);
+  }, [clearFavorites, clearRecentlyViewed, refreshCacheSize, clearInbox]);
 
   const favoriteApps = favorites
     .map((slug) => apps.find((a) => a.slug === slug))
