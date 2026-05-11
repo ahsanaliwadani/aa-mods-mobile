@@ -1,15 +1,8 @@
-import { app } from "./firebase";
-
-let perfInstance: import("firebase/performance").FirebasePerformance | null = null;
-
-async function getPerf(): Promise<import("firebase/performance").FirebasePerformance | null> {
-  if (perfInstance) return perfInstance;
-  try {
-    const { getPerformance } = await import("firebase/performance");
-    perfInstance = getPerformance(app);
-  } catch {}
-  return perfInstance;
-}
+// Firebase Performance SDK is intentionally disabled on web.
+// The SDK automatically instruments DOM elements and tries to record
+// React Native Web's generated CSS class strings as trace attribute values,
+// which Firebase rejects as invalid — causing unhandled FirebaseErrors.
+// Custom traces are instead logged as Analytics events (same as native).
 
 export type PerfTrace = {
   stop: (attributes?: Record<string, string>) => void;
@@ -17,29 +10,9 @@ export type PerfTrace = {
 
 export function startTrace(traceName: string): PerfTrace {
   const startTime = Date.now();
-  let firebaseTrace: import("firebase/performance").PerformanceTrace | null = null;
-
-  getPerf().then(async (perf) => {
-    if (!perf) return;
-    try {
-      const { trace } = await import("firebase/performance");
-      firebaseTrace = trace(perf, traceName);
-      firebaseTrace.start();
-    } catch {}
-  });
 
   return {
     stop(attributes?: Record<string, string>) {
-      if (firebaseTrace) {
-        try {
-          if (attributes) {
-            for (const [k, v] of Object.entries(attributes)) {
-              firebaseTrace!.putAttribute(k, v);
-            }
-          }
-          firebaseTrace.stop();
-        } catch {}
-      }
       const durationMs = Date.now() - startTime;
       try {
         import("./firebaseAnalytics").then(({ logAnalyticsEvent }) => {
@@ -47,7 +20,7 @@ export function startTrace(traceName: string): PerfTrace {
             duration_ms: durationMs,
             ...(attributes ?? {}),
           });
-        });
+        }).catch(() => {});
       } catch {}
     },
   };
