@@ -22,7 +22,7 @@ import { UserDataProvider } from "@/contexts/UserDataContext";
 import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
 import { NotificationInboxProvider, useNotificationInbox } from "@/contexts/NotificationInboxContext";
 import type { NotifType } from "@/contexts/NotificationInboxContext";
-import { setupPushNotifications } from "@/lib/notifications";
+import { setupPushNotifications, setupNotificationChannels } from "@/lib/notifications";
 import { logAppOpen } from "@/lib/analytics";
 import { ensureAnonymousAuth } from "@/lib/firebase";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
@@ -116,6 +116,12 @@ function RootLayoutNav() {
 
     if (typeof setInboxCallback === "function") {
       setInboxCallback(addItem);
+    }
+
+    // Set up notification channels immediately on Android (even in Expo Go)
+    // so local download/update notifications can fire before full push setup completes.
+    if (Platform.OS !== "web") {
+      setupNotificationChannels().catch(() => {});
     }
 
     if (!isExpoGo && Platform.OS !== "web") {
