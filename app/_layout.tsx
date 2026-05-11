@@ -125,13 +125,19 @@ function RootLayoutNav() {
       setupPushNotifications().catch(() => {});
 
       notifListener.current = Notifications.addNotificationReceivedListener(
-        (n: { request: { content: { title?: string; body?: string; data: Record<string, unknown> } } }) => {
+        (n: { request: { trigger?: { type?: string } | null; content: { title?: string; body?: string; data: Record<string, unknown> } } }) => {
           const { title, body, data } = n.request.content;
           if (!title) return;
           const type = getLocalNotifType(data ?? {});
           // Download events are already added to inbox by the phase-tracking effect above.
-          // Skipping here prevents duplicate inbox entries on native builds.
           if (type === "download_start" || type === "download_done" || type === "download_error") return;
+          // Remote FCM push (type "push") = OneSignal notification — already added to inbox
+          // by oneSignal.ts foregroundWillDisplay / click listeners. Skip to avoid duplicates.
+          const trigger = n.request.trigger as { type?: string } | null | undefined;
+          const isRemotePush = trigger !== null && trigger !== undefined && trigger?.type === "push";
+          if (isRemotePush) return;
+          // "general" with no trigger means unknown remote — also skip to avoid duplicates.
+          if (type === "general") return;
           addItem({
             title,
             body: body ?? "",

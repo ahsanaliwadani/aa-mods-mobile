@@ -5,16 +5,23 @@ import { logNotificationPermission } from "@/lib/analytics";
 
 const isExpoGo = Constants.appOwnership === "expo";
 
-// Always show notifications when they arrive, including when app is in foreground
+// Show local notifications (downloads etc.) in foreground.
+// Remote push notifications from OneSignal are suppressed here — OneSignal
+// handles their own display via its foregroundWillDisplay listener.
 if (!isExpoGo && Platform.OS !== "web") {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+      // Remote FCM push has trigger.type === "push"; local scheduled have null/other types
+      const trigger = notification.request.trigger as { type?: string } | null;
+      const isRemotePush = trigger !== null && trigger?.type === "push";
+      return {
+        shouldShowAlert: !isRemotePush,
+        shouldPlaySound: !isRemotePush,
+        shouldSetBadge: !isRemotePush,
+        shouldShowBanner: !isRemotePush,
+        shouldShowList: !isRemotePush,
+      };
+    },
   });
 }
 
