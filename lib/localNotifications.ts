@@ -8,10 +8,19 @@ export const canLocalNotify = Platform.OS !== "web" && !isExpoGo;
 async function schedule(content: Notifications.NotificationContentInput): Promise<void> {
   if (!canLocalNotify) return;
   try {
-    const { status } = await Notifications.getPermissionsAsync().catch(() => ({ status: "denied" as const }));
+    const { status } = await Notifications.getPermissionsAsync().catch(() => ({
+      status: "denied" as const,
+    }));
     if (status !== "granted") return;
-    await Notifications.scheduleNotificationAsync({ content, trigger: null });
-  } catch {}
+    await Notifications.scheduleNotificationAsync({
+      content,
+      trigger: null,
+    });
+  } catch (err) {
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.warn("[LocalNotifications] schedule error:", err);
+    }
+  }
 }
 
 export async function notifyDownloadStarted(appName: string): Promise<void> {
@@ -20,7 +29,9 @@ export async function notifyDownloadStarted(appName: string): Promise<void> {
     body: `Downloading ${appName}…`,
     data: { type: "download_start", appName },
     sound: undefined,
-    ...(Platform.OS === "android" ? { channelId: "aa-mods-general" } : {}),
+    ...(Platform.OS === "android"
+      ? { channelId: "aa-mods-general" }
+      : {}),
   });
 }
 
@@ -30,11 +41,16 @@ export async function notifyDownloadFinished(appName: string): Promise<void> {
     body: `${appName} is ready to install!`,
     data: { type: "download_done", appName },
     sound: "default",
-    ...(Platform.OS === "android" ? { channelId: "aa-mods-updates" } : {}),
+    ...(Platform.OS === "android"
+      ? { channelId: "aa-mods-updates" }
+      : {}),
   });
 }
 
-export async function notifyDownloadFailed(appName: string, error?: string): Promise<void> {
+export async function notifyDownloadFailed(
+  appName: string,
+  error?: string,
+): Promise<void> {
   await schedule({
     title: "Download Failed",
     body: error
@@ -42,11 +58,16 @@ export async function notifyDownloadFailed(appName: string, error?: string): Pro
       : `Failed to download ${appName}. Tap to retry.`,
     data: { type: "download_error", appName },
     sound: "default",
-    ...(Platform.OS === "android" ? { channelId: "aa-mods-general" } : {}),
+    ...(Platform.OS === "android"
+      ? { channelId: "aa-mods-general" }
+      : {}),
   });
 }
 
-export async function notifyUpdateAvailable(count: number, firstAppName?: string): Promise<void> {
+export async function notifyUpdateAvailable(
+  count: number,
+  firstAppName?: string,
+): Promise<void> {
   const title =
     count === 1 ? "1 Update Available" : `${count} Updates Available`;
   const body =
@@ -58,21 +79,31 @@ export async function notifyUpdateAvailable(count: number, firstAppName?: string
     body,
     data: { type: "update_available", count },
     sound: "default",
-    ...(Platform.OS === "android" ? { channelId: "aa-mods-updates" } : {}),
+    ...(Platform.OS === "android"
+      ? { channelId: "aa-mods-updates" }
+      : {}),
   });
 }
 
-export async function notifyNewApp(appName: string, category: string): Promise<void> {
+export async function notifyNewApp(
+  appName: string,
+  category: string,
+): Promise<void> {
   await schedule({
     title: "New Mod Added 🎉",
     body: `${appName} (${category}) is now available on AA Mods Store.`,
     data: { type: "new_app", appName },
     sound: "default",
-    ...(Platform.OS === "android" ? { channelId: "aa-mods-updates" } : {}),
+    ...(Platform.OS === "android"
+      ? { channelId: "aa-mods-updates" }
+      : {}),
   });
 }
 
-export async function notifyInstalledAppsUpdated(appNames: string[], count: number): Promise<void> {
+export async function notifyInstalledAppsUpdated(
+  appNames: string[],
+  count: number,
+): Promise<void> {
   const title = count === 1 ? "App Update Available" : `${count} Apps Need Updates`;
   const body =
     count === 1
@@ -83,6 +114,8 @@ export async function notifyInstalledAppsUpdated(appNames: string[], count: numb
     body,
     data: { type: "installed_update", count, appNames },
     sound: "default",
-    ...(Platform.OS === "android" ? { channelId: "aa-mods-updates" } : {}),
+    ...(Platform.OS === "android"
+      ? { channelId: "aa-mods-updates" }
+      : {}),
   });
 }

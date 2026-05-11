@@ -28,7 +28,7 @@ if (Platform.OS !== "web") {
 // Create Android notification channels — call this early at app start,
 // independently of whether EAS push tokens are available.
 export async function setupNotificationChannels(): Promise<void> {
-  if (Platform.OS !== "android" || Platform.OS === "web") return;
+  if (Platform.OS !== "android") return;
   try {
     await Notifications.setNotificationChannelAsync("aa-mods-updates", {
       name: "App Updates",

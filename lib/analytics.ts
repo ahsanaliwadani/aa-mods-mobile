@@ -101,6 +101,14 @@ export function logApkInstalled(appSlug: string, appName: string, version: strin
   logAnalyticsEvent("apk_installed", { app_slug: appSlug, app_name: appName, version });
 }
 
+export function logWifiOnlyBlocked(appSlug: string, appName: string): void {
+  logAnalyticsEvent("download_wifi_only_blocked", { app_slug: appSlug, app_name: appName });
+}
+
+export function logWifiOnlyBypassed(appSlug: string, appName: string): void {
+  logAnalyticsEvent("download_wifi_only_bypassed", { app_slug: appSlug, app_name: appName });
+}
+
 // ─── Search ────────────────────────────────────────────────────────────────
 
 export function logSearchQuery(query: string, resultCount: number): void {

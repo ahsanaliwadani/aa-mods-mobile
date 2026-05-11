@@ -4,6 +4,7 @@ const MEASUREMENT_ID = "G-SEFN4WE4PT";
 const API_SECRET = process.env.EXPO_PUBLIC_GA4_API_SECRET ?? "";
 const GA4_URL = `https://www.google-analytics.com/mp/collect?measurement_id=${MEASUREMENT_ID}&api_secret=${API_SECRET}`;
 const CLIENT_ID_KEY = "@aa_mods_ga4_client_id_v1";
+const SESSION_ID_KEY = "@aa_mods_ga4_session_id_v1";
 
 type QueuedEvent = {
   name: string;
@@ -11,6 +12,7 @@ type QueuedEvent = {
 };
 
 let _clientId: string | null = null;
+let _sessionId: number = Date.now();
 let _ready = false;
 const _queue: QueuedEvent[] = [];
 
@@ -30,8 +32,14 @@ async function initClientId(): Promise<void> {
       await AsyncStorage.setItem(CLIENT_ID_KEY, id).catch(() => {});
     }
     _clientId = id;
+
+    // Session ID: regenerate each app launch (not persisted across sessions)
+    const storedSession = await AsyncStorage.getItem(SESSION_ID_KEY).catch(() => null);
+    _sessionId = storedSession ? parseInt(storedSession, 10) : Date.now();
+    await AsyncStorage.setItem(SESSION_ID_KEY, String(_sessionId)).catch(() => {});
   } catch {
     _clientId = genUuid();
+    _sessionId = Date.now();
   }
   _ready = true;
   if (_queue.length > 0) {
@@ -47,15 +55,16 @@ async function sendNow(
   params?: Record<string, string | number | boolean | null>,
 ): Promise<void> {
   if (!_clientId) return;
-  // If no API secret, log to console in dev mode only — events won't reach GA4
+
   if (!API_SECRET) {
     if (typeof __DEV__ !== "undefined" && __DEV__) {
       console.log(`[Analytics:native] ${name}`, params ?? {});
     }
     return;
   }
+
   try {
-    await fetch(GA4_URL, {
+    const response = await fetch(GA4_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -64,13 +73,19 @@ async function sendNow(
           {
             name,
             params: {
-              engagement_time_msec: "1",
+              engagement_time_msec: 100,
+              session_id: _sessionId,
               ...(params ?? {}),
             },
           },
         ],
       }),
     });
+
+    if (typeof __DEV__ !== "undefined" && __DEV__ && !response.ok) {
+      const text = await response.text().catch(() => "");
+      console.warn(`[Analytics:native] GA4 error for "${name}" (${response.status}):`, text);
+    }
   } catch {
     // Network error — silently ignore, analytics must never crash the app
   }
@@ -79,6 +94,7 @@ async function sendNow(
 // Bootstrap async — fires immediately so queue drains fast
 initClientId().catch(() => {
   _clientId = genUuid();
+  _sessionId = Date.now();
   _ready = true;
 });
 
@@ -86,8 +102,6 @@ export function logAnalyticsEvent(
   event: string,
   params?: Record<string, string | number | boolean | null>,
 ): void {
-  // This file is only loaded on native (Android/iOS).
-  // Web uses firebaseAnalytics.web.ts via Metro/webpack platform resolution.
   try {
     if (!_ready || !_clientId) {
       _queue.push({ name: event, params });

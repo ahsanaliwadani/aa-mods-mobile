@@ -9,11 +9,12 @@ const _queue: QueuedEvent[] = [];
 
 (async () => {
   try {
-    const { isSupported, getAnalytics } = await import("firebase/analytics");
+    const { isSupported, getAnalytics, setAnalyticsCollectionEnabled } = await import("firebase/analytics");
     if (await isSupported()) {
       analyticsInstance = getAnalytics(app);
+      setAnalyticsCollectionEnabled(analyticsInstance, true);
       analyticsReady = true;
-      // Flush events that were queued before analytics was ready
+
       if (_queue.length > 0) {
         const { logEvent } = await import("firebase/analytics");
         const pending = _queue.splice(0);
@@ -25,8 +26,20 @@ const _queue: QueuedEvent[] = [];
           } catch {}
         }
       }
+
+      if (typeof __DEV__ !== "undefined" && __DEV__) {
+        console.log("[Analytics:web] Firebase Analytics initialized");
+      }
+    } else {
+      if (typeof __DEV__ !== "undefined" && __DEV__) {
+        console.warn("[Analytics:web] Firebase Analytics not supported in this environment");
+      }
     }
-  } catch {}
+  } catch (err) {
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.warn("[Analytics:web] Firebase Analytics init error:", err);
+    }
+  }
 })();
 
 export function logAnalyticsEvent(
@@ -35,7 +48,6 @@ export function logAnalyticsEvent(
 ): void {
   try {
     if (!analyticsReady || !analyticsInstance) {
-      // Queue the event — will be flushed once analytics initializes
       _queue.push({ event, params });
       return;
     }
@@ -43,6 +55,9 @@ export function logAnalyticsEvent(
       .then(({ logEvent }) => {
         if (analyticsInstance) {
           logEvent(analyticsInstance, event, (params ?? {}) as Record<string, string>);
+          if (typeof __DEV__ !== "undefined" && __DEV__) {
+            console.log(`[Analytics:web] ${event}`, params ?? {});
+          }
         }
       })
       .catch(() => {});

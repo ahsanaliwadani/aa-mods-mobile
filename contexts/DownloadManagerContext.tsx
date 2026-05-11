@@ -22,8 +22,16 @@ import {
   logDownloadRetried,
   logMediafireResolved,
   logApkInstalled,
+  logWifiOnlyBlocked,
+  logWifiOnlyBypassed,
 } from "@/lib/analytics";
 import { startTrace } from "@/lib/firebasePerformance";
+import {
+  getConnectionType,
+  isWifiOnlyEnabled,
+  getNotifPrefs,
+  showWifiOnlyAlert,
+} from "@/lib/networkUtils";
 
 import type { DownloadResumable as _DownloadResumable } from "expo-file-system/legacy";
 
@@ -184,6 +192,24 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       const existing = downloadsRef.current.get(slug);
       if (existing && (existing.phase === "downloading" || existing.phase === "resolving")) return;
 
+      // ── WiFi-only enforcement ──────────────────────────────────────────
+      if (Platform.OS !== "web") {
+        const [wifiOnly, connType] = await Promise.all([
+          isWifiOnlyEnabled(),
+          getConnectionType(),
+        ]);
+
+        if (wifiOnly && connType === "cellular") {
+          // Show alert and wait for user decision
+          const proceed = await showWifiOnlyAlert();
+          if (!proceed) {
+            logWifiOnlyBlocked(slug, appName);
+            return;
+          }
+          logWifiOnlyBypassed(slug, appName);
+        }
+      }
+
       const entry: DownloadEntry = {
         slug,
         appName,
@@ -248,7 +274,14 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       }
 
       updateEntry(slug, { phase: "downloading", link: resolvedLink });
-      notifyDownloadStarted(appName).catch(() => {});
+
+      // ── Notify download started (respects user prefs) ──────────────────
+      getNotifPrefs().then((notifPrefs) => {
+        if (notifPrefs.showDownloadNotifications && notifPrefs.notifyOnDownloadStart) {
+          notifyDownloadStarted(appName).catch(() => {});
+        }
+      }).catch(() => {});
+
       logDownloadStarted(slug, appName, storeVersion, linkType);
 
       const downloadTrace = startTrace("apk_download");
@@ -285,7 +318,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
                 speedBps = (written - tracker.lastBytes) / dt;
                 speedTracker.current.set(slug, { lastBytes: written, lastTime: now });
               } else {
-                // Use ref to read current speed without stale closure
                 speedBps = downloadsRef.current.get(slug)?.speedBps ?? 0;
               }
             }
@@ -314,12 +346,26 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
             progress: 100,
             apkPath: result.uri,
           });
-          notifyDownloadFinished(appName).catch(() => {});
+
+          // ── Notify download complete (respects user prefs) ───────────
+          getNotifPrefs().then((notifPrefs) => {
+            if (notifPrefs.showDownloadNotifications && notifPrefs.notifyOnDownloadComplete) {
+              notifyDownloadFinished(appName).catch(() => {});
+            }
+          }).catch(() => {});
+
           logDownloadCompleted(slug, appName, storeVersion, durationMs, fileSizeMb);
         } else {
           downloadTrace.stop({ app_slug: slug, success: "false" });
           updateEntry(slug, { phase: "error", error: "Download failed. Please try again." });
-          notifyDownloadFailed(appName, "Download failed. Please try again.").catch(() => {});
+
+          // ── Notify download failed (always shown regardless of prefs) ─
+          getNotifPrefs().then((notifPrefs) => {
+            if (notifPrefs.showDownloadNotifications) {
+              notifyDownloadFailed(appName, "Download failed. Please try again.").catch(() => {});
+            }
+          }).catch(() => {});
+
           logDownloadFailed(slug, appName, "result_missing_uri");
         }
       } catch (e: unknown) {
@@ -338,7 +384,14 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         } else {
           downloadTrace.stop({ app_slug: slug, success: "false" });
           updateEntry(slug, { phase: "error", error: msg });
-          notifyDownloadFailed(appName, msg).catch(() => {});
+
+          // ── Notify download failed on exception ───────────────────────
+          getNotifPrefs().then((notifPrefs) => {
+            if (notifPrefs.showDownloadNotifications) {
+              notifyDownloadFailed(appName, msg).catch(() => {});
+            }
+          }).catch(() => {});
+
           logDownloadFailed(slug, appName, msg.slice(0, 80));
         }
       }
@@ -390,7 +443,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         }
       } catch {}
       speedTracker.current.delete(slug);
-      // logDownloadCancelled is handled in the catch branch of startDownload
       setDownloads((prev) => {
         const next = new Map(prev);
         next.delete(slug);
