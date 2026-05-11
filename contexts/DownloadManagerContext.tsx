@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Platform } from "react-native";
+import { Platform, Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { resolveMediaFireLink, isMediaFireUrl, isDirectApkUrl } from "@/lib/mediafireResolver";
 import {
@@ -47,6 +47,7 @@ const IntentLauncher =
 
 const INSTALLED_APPS_KEY = "@aa_mods_installed_apps_v1";
 const DOWNLOADS_KEY = "@aa_mods_downloads_v1";
+const DOWNLOAD_DIR_KEY = "@aa_mods_download_dir_v1";
 
 export type DownloadPhase =
   | "idle"
@@ -54,7 +55,8 @@ export type DownloadPhase =
   | "downloading"
   | "done"
   | "error"
-  | "installing";
+  | "installing"
+  | "installed";
 
 export type DownloadEntry = {
   slug: string;
@@ -92,12 +94,16 @@ type DownloadManagerContextType = {
   clearEntry: (slug: string) => void;
   clearAllCompleted: () => void;
   getEntry: (slug: string) => DownloadEntry | undefined;
+  saveApkToDownloads: (slug: string) => Promise<boolean>;
   installedApps: Record<string, InstalledApp>;
   markInstalled: (slug: string, version: string) => void;
   isInstalled: (slug: string) => boolean;
   getInstalledVersion: (slug: string) => string | null;
   hasUpdate: (slug: string, storeVersion: string) => boolean;
   clearInstalledApp: (slug: string) => void;
+  downloadDirUri: string | null;
+  setDownloadDir: (uri: string | null) => void;
+  pickDownloadDir: () => Promise<string | null>;
 };
 
 const DownloadManagerContext = createContext<DownloadManagerContextType | null>(null);
@@ -116,14 +122,25 @@ function compareVersions(a: string, b: string): number {
   }
 }
 
+async function deleteApkFile(apkPath?: string): Promise<void> {
+  if (!apkPath || !FileSystem) return;
+  if (apkPath.startsWith("content://")) return; // SAF URIs managed by system
+  try {
+    const info = await FileSystem.getInfoAsync(apkPath);
+    if (info.exists) {
+      await FileSystem.deleteAsync(apkPath, { idempotent: true });
+    }
+  } catch {}
+}
+
 export function DownloadManagerProvider({ children }: { children: React.ReactNode }) {
   const [downloads, setDownloads] = useState<Map<string, DownloadEntry>>(new Map());
   const [installedApps, setInstalledApps] = useState<Record<string, InstalledApp>>({});
+  const [downloadDirUri, setDownloadDirUriState] = useState<string | null>(null);
 
   const resumableRefs = useRef<Map<string, _DownloadResumable>>(new Map());
   const speedTracker = useRef<Map<string, { lastBytes: number; lastTime: number }>>(new Map());
 
-  // Keep a ref in sync with state to avoid stale closures in callbacks
   const downloadsRef = useRef<Map<string, DownloadEntry>>(downloads);
   useEffect(() => {
     downloadsRef.current = downloads;
@@ -149,7 +166,12 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         setDownloads((prev) => {
           const next = new Map(prev);
           for (const entry of arr) {
-            if (entry.slug && (entry.phase === "done" || entry.phase === "error")) {
+            if (
+              entry.slug &&
+              (entry.phase === "done" ||
+                entry.phase === "error" ||
+                entry.phase === "installed")
+            ) {
               next.set(entry.slug, entry);
             }
           }
@@ -157,17 +179,93 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         });
       })
       .catch(() => {});
+
+    AsyncStorage.getItem(DOWNLOAD_DIR_KEY)
+      .then((uri) => {
+        if (uri) setDownloadDirUriState(uri);
+      })
+      .catch(() => {});
   }, []);
 
+  // Persist completed/installed/error entries
   useEffect(() => {
-    const completed: DownloadEntry[] = [];
+    const toSave: DownloadEntry[] = [];
     for (const entry of downloads.values()) {
-      if (entry.phase === "done" || entry.phase === "error") {
-        completed.push(entry);
+      if (
+        entry.phase === "done" ||
+        entry.phase === "error" ||
+        entry.phase === "installed"
+      ) {
+        toSave.push(entry);
       }
     }
-    AsyncStorage.setItem(DOWNLOADS_KEY, JSON.stringify(completed)).catch(() => {});
+    AsyncStorage.setItem(DOWNLOADS_KEY, JSON.stringify(toSave)).catch(() => {});
   }, [downloads]);
+
+  const setDownloadDir = useCallback((uri: string | null) => {
+    setDownloadDirUriState(uri);
+    if (uri) {
+      AsyncStorage.setItem(DOWNLOAD_DIR_KEY, uri).catch(() => {});
+    } else {
+      AsyncStorage.removeItem(DOWNLOAD_DIR_KEY).catch(() => {});
+    }
+  }, []);
+
+  const pickDownloadDir = useCallback(async (): Promise<string | null> => {
+    if (Platform.OS !== "android" || !FileSystem) return null;
+    try {
+      const SAF = FileSystem.StorageAccessFramework;
+      const result = await SAF.requestDirectoryPermissionsAsync();
+      if (result.granted && result.directoryUri) {
+        setDownloadDir(result.directoryUri);
+        return result.directoryUri;
+      }
+    } catch {}
+    return null;
+  }, [setDownloadDir]);
+
+  const saveApkToDownloads = useCallback(async (slug: string): Promise<boolean> => {
+    if (Platform.OS !== "android" || !FileSystem) return false;
+    const entry = downloadsRef.current.get(slug);
+    if (!entry?.apkPath) return false;
+    if (entry.apkPath.startsWith("content://")) return false; // Already in SAF
+
+    let targetUri = downloadDirUri;
+
+    if (!targetUri) {
+      // Ask user to pick a folder
+      try {
+        const SAF = FileSystem.StorageAccessFramework;
+        const result = await SAF.requestDirectoryPermissionsAsync();
+        if (!result.granted || !result.directoryUri) return false;
+        targetUri = result.directoryUri;
+        setDownloadDir(targetUri);
+      } catch {
+        return false;
+      }
+    }
+
+    try {
+      const SAF = FileSystem.StorageAccessFramework;
+      const safeName = entry.appName.replace(/[^a-zA-Z0-9]/g, "_");
+      const fileName = `${safeName}_v${entry.storeVersion}.apk`;
+
+      const content = await FileSystem.readAsStringAsync(entry.apkPath, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const destUri = await SAF.createFileAsync(
+        targetUri,
+        fileName,
+        "application/vnd.android.package-archive",
+      );
+      await FileSystem.writeAsStringAsync(destUri, content, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [downloadDirUri, setDownloadDir]);
 
   const updateEntry = useCallback((slug: string, patch: Partial<DownloadEntry>) => {
     setDownloads((prev) => {
@@ -188,7 +286,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       link: string,
       iconUri?: string,
     ) => {
-      // Use ref to avoid stale closure when checking existing downloads
       const existing = downloadsRef.current.get(slug);
       if (existing && (existing.phase === "downloading" || existing.phase === "resolving")) return;
 
@@ -200,7 +297,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         ]);
 
         if (wifiOnly && connType === "cellular") {
-          // Show alert and wait for user decision
           const proceed = await showWifiOnlyAlert();
           if (!proceed) {
             logWifiOnlyBlocked(slug, appName);
@@ -275,7 +371,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
       updateEntry(slug, { phase: "downloading", link: resolvedLink });
 
-      // ── Notify download started (respects user prefs) ──────────────────
       getNotifPrefs().then((notifPrefs) => {
         if (notifPrefs.showDownloadNotifications && notifPrefs.notifyOnDownloadStart) {
           notifyDownloadStarted(appName).catch(() => {});
@@ -347,7 +442,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
             apkPath: result.uri,
           });
 
-          // ── Notify download complete (respects user prefs) ───────────
           getNotifPrefs().then((notifPrefs) => {
             if (notifPrefs.showDownloadNotifications && notifPrefs.notifyOnDownloadComplete) {
               notifyDownloadFinished(appName).catch(() => {});
@@ -359,7 +453,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           downloadTrace.stop({ app_slug: slug, success: "false" });
           updateEntry(slug, { phase: "error", error: "Download failed. Please try again." });
 
-          // ── Notify download failed (always shown regardless of prefs) ─
           getNotifPrefs().then((notifPrefs) => {
             if (notifPrefs.showDownloadNotifications) {
               notifyDownloadFailed(appName, "Download failed. Please try again.").catch(() => {});
@@ -385,7 +478,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           downloadTrace.stop({ app_slug: slug, success: "false" });
           updateEntry(slug, { phase: "error", error: msg });
 
-          // ── Notify download failed on exception ───────────────────────
           getNotifPrefs().then((notifPrefs) => {
             if (notifPrefs.showDownloadNotifications) {
               notifyDownloadFailed(appName, msg).catch(() => {});
@@ -410,19 +502,26 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           updateEntry(slug, { phase: "error", error: "Installation not supported on this platform." });
           return;
         }
-        const contentUri = await FileSystem.getContentUriAsync(entry.apkPath);
+
+        // Support both file:// (internal) and content:// (SAF) URIs
+        let contentUri: string;
+        if (entry.apkPath.startsWith("content://")) {
+          contentUri = entry.apkPath;
+        } else {
+          contentUri = await FileSystem.getContentUriAsync(entry.apkPath);
+        }
+
         await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
           data: contentUri,
           flags: 1,
           type: "application/vnd.android.package-archive",
         });
+
         markInstalled(slug, entry.storeVersion);
         logApkInstalled(slug, entry.appName, entry.storeVersion);
-        setDownloads((prev) => {
-          const next = new Map(prev);
-          next.delete(slug);
-          return next;
-        });
+
+        // Keep the entry as "installed" — APK stays on disk, user can reinstall anytime
+        updateEntry(slug, { phase: "installed" });
       } catch {
         updateEntry(slug, {
           phase: "error",
@@ -467,7 +566,10 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     [startDownload],
   );
 
+  // clearEntry removes from map AND deletes the APK file from disk
   const clearEntry = useCallback((slug: string) => {
+    const entry = downloadsRef.current.get(slug);
+    deleteApkFile(entry?.apkPath).catch(() => {});
     setDownloads((prev) => {
       const next = new Map(prev);
       next.delete(slug);
@@ -475,11 +577,17 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     });
   }, []);
 
+  // clearAllCompleted removes all done/error/installed entries AND their APK files
   const clearAllCompleted = useCallback(() => {
     setDownloads((prev) => {
       const next = new Map(prev);
       for (const [slug, entry] of next) {
-        if (entry.phase === "done" || entry.phase === "error") {
+        if (
+          entry.phase === "done" ||
+          entry.phase === "error" ||
+          entry.phase === "installed"
+        ) {
+          deleteApkFile(entry.apkPath).catch(() => {});
           next.delete(slug);
         }
       }
@@ -539,12 +647,16 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         clearEntry,
         clearAllCompleted,
         getEntry,
+        saveApkToDownloads,
         installedApps,
         markInstalled,
         isInstalled,
         getInstalledVersion,
         hasUpdate,
         clearInstalledApp,
+        downloadDirUri,
+        setDownloadDir,
+        pickDownloadDir,
       }}
     >
       {children}

@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -38,15 +39,20 @@ function formatEta(bytesLeft: number, speedBps: number): string {
 function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () => void }) {
   const colors = useColors();
   const dm = useDownloadManager();
+  const [saving, setSaving] = useState(false);
 
   const isActive = entry.phase === "downloading" || entry.phase === "resolving";
   const isDone = entry.phase === "done";
   const isError = entry.phase === "error";
   const isInstalling = entry.phase === "installing";
+  const isInstalled = entry.phase === "installed";
+  const isFinished = isDone || isInstalled;
 
   const bytesLeft = entry.bytesTotal > 0 ? entry.bytesTotal - entry.bytesWritten : 0;
 
-  const phaseColor = isDone
+  const phaseColor = isInstalled
+    ? "#22d3ee"
+    : isDone
     ? colors.primary
     : isError
     ? "#ef4444"
@@ -54,27 +60,52 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
     ? "#fbbf24"
     : colors.accent;
 
-  const phaseLabel =
-    entry.phase === "resolving"
-      ? "Resolving link…"
-      : entry.phase === "downloading"
-      ? `Downloading ${entry.progress}%`
-      : entry.phase === "done"
-      ? "Complete"
-      : entry.phase === "installing"
-      ? "Installing…"
-      : entry.phase === "error"
-      ? "Failed"
-      : "Waiting";
+  const phaseLabel = isInstalled
+    ? "Installed — tap to reinstall"
+    : entry.phase === "resolving"
+    ? "Resolving link…"
+    : entry.phase === "downloading"
+    ? `Downloading ${entry.progress}%`
+    : entry.phase === "done"
+    ? "Ready to install"
+    : entry.phase === "installing"
+    ? "Installing…"
+    : entry.phase === "error"
+    ? "Failed"
+    : "Waiting";
 
-  const phaseIcon =
-    isDone
+  const phaseIcon: "checkmark-circle" | "alert-circle" | "hardware-chip-outline" | "download" | "checkmark-done-circle" =
+    isInstalled
+      ? "checkmark-done-circle"
+      : isDone
       ? "checkmark-circle"
       : isError
       ? "alert-circle"
       : isInstalling
       ? "hardware-chip-outline"
       : "download";
+
+  const cardBorderColor = isInstalled
+    ? "rgba(34,211,238,0.25)"
+    : isActive
+    ? "rgba(0,230,115,0.3)"
+    : isError
+    ? "rgba(239,68,68,0.3)"
+    : isDone
+    ? "rgba(0,230,115,0.2)"
+    : colors.border;
+
+  const handleSaveToDownloads = async () => {
+    setSaving(true);
+    haptics.medium();
+    const ok = await dm.saveApkToDownloads(entry.slug);
+    setSaving(false);
+    if (ok) {
+      Alert.alert("Saved", `${entry.appName} APK has been saved to your selected folder.`);
+    } else {
+      Alert.alert("Error", "Could not save APK. Please try again.");
+    }
+  };
 
   return (
     <Pressable
@@ -83,13 +114,7 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
         styles.card,
         {
           backgroundColor: colors.card,
-          borderColor: isActive
-            ? "rgba(0,230,115,0.3)"
-            : isError
-            ? "rgba(239,68,68,0.3)"
-            : isDone
-            ? "rgba(0,230,115,0.2)"
-            : colors.border,
+          borderColor: cardBorderColor,
           opacity: pressed ? 0.92 : 1,
         },
       ]}
@@ -102,7 +127,7 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
           </Text>
           <Text style={[styles.version, { color: colors.mutedForeground }]}>v{entry.storeVersion}</Text>
           <View style={styles.phaseRow}>
-            <Ionicons name={phaseIcon as "download"} size={12} color={phaseColor} />
+            <Ionicons name={phaseIcon} size={12} color={phaseColor} />
             <Text style={[styles.phaseLabel, { color: phaseColor }]}>{phaseLabel}</Text>
             {isActive && entry.speedBps > 0 && (
               <Text style={[styles.speed, { color: colors.mutedForeground }]}>
@@ -133,15 +158,31 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
               <Ionicons name="refresh" size={14} color={colors.primary} />
             </Pressable>
           )}
-          {(isDone || isError) && (
+
+          {/* Save to Downloads button (Android only, for done/installed with file:// apkPath) */}
+          {Platform.OS === "android" && isFinished && entry.apkPath && !entry.apkPath.startsWith("content://") && (
+            <Pressable
+              onPress={handleSaveToDownloads}
+              hitSlop={8}
+              disabled={saving}
+              style={[styles.actionBtn, { backgroundColor: "rgba(251,191,36,0.1)", borderColor: "rgba(251,191,36,0.35)", opacity: saving ? 0.5 : 1 }]}
+            >
+              <Ionicons name="folder-open-outline" size={14} color="#fbbf24" />
+            </Pressable>
+          )}
+
+          {/* Clear/delete button — for done, error, installed */}
+          {(isFinished || isError) && (
             <Pressable
               onPress={() => { haptics.selection(); dm.clearEntry(entry.slug); }}
               hitSlop={8}
               style={[styles.actionBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
             >
-              <Ionicons name="close" size={14} color={colors.mutedForeground} />
+              <Ionicons name="trash-outline" size={14} color={colors.mutedForeground} />
             </Pressable>
           )}
+
+          {/* Install / Reinstall button */}
           {Platform.OS === "android" && isDone && entry.apkPath && (
             <Pressable
               onPress={() => { haptics.medium(); dm.installApk(entry.slug); }}
@@ -150,6 +191,16 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
             >
               <Ionicons name="download" size={12} color={colors.primaryForeground} />
               <Text style={[styles.installBtnText, { color: colors.primaryForeground }]}>Install</Text>
+            </Pressable>
+          )}
+          {Platform.OS === "android" && isInstalled && entry.apkPath && (
+            <Pressable
+              onPress={() => { haptics.medium(); dm.installApk(entry.slug); }}
+              hitSlop={8}
+              style={[styles.installBtn, { backgroundColor: "#22d3ee" }]}
+            >
+              <Ionicons name="refresh" size={12} color="#0a0a0a" />
+              <Text style={[styles.installBtnText, { color: "#0a0a0a" }]}>Reinstall</Text>
             </Pressable>
           )}
         </View>
@@ -177,6 +228,16 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
         </Text>
       )}
 
+      {/* Installed badge */}
+      {isInstalled && (
+        <View style={[styles.installedBadge, { backgroundColor: "rgba(34,211,238,0.08)", borderColor: "rgba(34,211,238,0.2)" }]}>
+          <Ionicons name="checkmark-done-circle" size={12} color="#22d3ee" />
+          <Text style={[styles.installedBadgeText, { color: "#22d3ee" }]}>
+            APK is saved on device — tap Reinstall any time
+          </Text>
+        </View>
+      )}
+
       {/* Error message */}
       {isError && entry.error && (
         <Text style={[styles.errorText, { color: "#ef4444" }]} numberOfLines={2}>
@@ -198,9 +259,10 @@ export default function DownloadsScreen() {
 
   const allEntries = Array.from(dm.downloads.values());
   const active = allEntries.filter((e) => e.phase === "downloading" || e.phase === "resolving" || e.phase === "installing");
-  const completed = allEntries.filter((e) => e.phase === "done");
+  const ready = allEntries.filter((e) => e.phase === "done");
+  const installed = allEntries.filter((e) => e.phase === "installed");
   const failed = allEntries.filter((e) => e.phase === "error");
-  const hasCompleted = completed.length > 0 || failed.length > 0;
+  const hasCompletedOrInstalled = ready.length > 0 || failed.length > 0 || installed.length > 0;
 
   const goToApp = (slug: string) => router.push(`/app/${slug}`);
 
@@ -212,9 +274,19 @@ export default function DownloadsScreen() {
           <Text style={[styles.eyebrow, { color: colors.accent }]}>AA MODS</Text>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Downloads</Text>
         </View>
-        {hasCompleted && (
+        {hasCompletedOrInstalled && (
           <Pressable
-            onPress={() => { haptics.medium(); dm.clearAllCompleted(); }}
+            onPress={() => {
+              haptics.medium();
+              Alert.alert(
+                "Clear All",
+                "This will remove all completed downloads and their APK files from device storage. Installed apps will remain on your phone.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Clear All", style: "destructive", onPress: () => dm.clearAllCompleted() },
+                ],
+              );
+            }}
             style={({ pressed }) => [styles.clearBtn, { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.8 : 1 }]}
           >
             <Ionicons name="trash-outline" size={14} color={colors.mutedForeground} />
@@ -262,15 +334,29 @@ export default function DownloadsScreen() {
             </View>
           )}
 
-          {/* Completed */}
-          {completed.length > 0 && (
+          {/* Ready to install */}
+          {ready.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionDot, { backgroundColor: colors.primary }]} />
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Ready to Install</Text>
+                <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>{ready.length}</Text>
+              </View>
+              {ready.map((e) => (
+                <DownloadCard key={e.slug} entry={e} onPress={() => goToApp(e.slug)} />
+              ))}
+            </View>
+          )}
+
+          {/* Installed — always visible until user deletes */}
+          {installed.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={[styles.sectionDot, { backgroundColor: "#22d3ee" }]} />
-                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Completed</Text>
-                <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>{completed.length}</Text>
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Installed</Text>
+                <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>{installed.length}</Text>
               </View>
-              {completed.map((e) => (
+              {installed.map((e) => (
                 <DownloadCard key={e.slug} entry={e} onPress={() => goToApp(e.slug)} />
               ))}
             </View>
@@ -357,6 +443,16 @@ const styles = StyleSheet.create({
   progressTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 3 },
   sizeMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  installedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  installedBadgeText: { fontSize: 11, fontFamily: "Inter_400Regular", flex: 1 },
   errorText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 },
   emptyIconWrap: {
