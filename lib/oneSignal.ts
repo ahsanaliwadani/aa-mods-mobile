@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import * as Linking from "expo-linking";
-import { OneSignal, LogLevel } from "react-native-onesignal";
+import { OneSignal, LogLevel, type NotificationWillDisplayEvent, type NotificationClickEvent } from "react-native-onesignal";
 
 const APP_ID = "c0dd2a7a-37c7-450e-89a0-08c8ec3f446d";
 
@@ -15,6 +15,11 @@ type InboxAddFn = (item: {
 }) => void;
 
 let _inboxCallback: InboxAddFn | null = null;
+
+// Track notification IDs already added to inbox via foregroundWillDisplay so
+// the click handler doesn't add a duplicate when the user taps the notification
+// while the app is in the foreground.
+const _foregroundAddedIds = new Set<string>();
 
 export function setInboxCallback(cb: InboxAddFn | null): void {
   _inboxCallback = cb;
@@ -40,7 +45,7 @@ export function initializeOneSignal(): void {
     OneSignal.Debug.setLogLevel(LogLevel.Warn);
     OneSignal.initialize(APP_ID);
 
-    OneSignal.Notifications.addEventListener("foregroundWillDisplay", (event) => {
+    OneSignal.Notifications.addEventListener("foregroundWillDisplay", (event: NotificationWillDisplayEvent) => {
       const notif = event.getNotification();
       const title = notif.title ?? "";
       const body = notif.body ?? "";
@@ -50,12 +55,16 @@ export function initializeOneSignal(): void {
         (raw.bigPicture as string | undefined) ??
         (raw.largeIcon as string | undefined) ??
         undefined;
+      const notifId: string = (raw.notificationId as string | undefined) ?? "";
+
+      // Mark as added so click handler skips the duplicate
+      if (notifId) _foregroundAddedIds.add(notifId);
 
       addToInbox(title, body, data, imageUrl);
       event.getNotification().display();
     });
 
-    OneSignal.Notifications.addEventListener("click", (event) => {
+    OneSignal.Notifications.addEventListener("click", (event: NotificationClickEvent) => {
       try {
         const notif = event.notification;
         const title = notif.title ?? "";
@@ -66,8 +75,14 @@ export function initializeOneSignal(): void {
           (raw.bigPicture as string | undefined) ??
           (raw.largeIcon as string | undefined) ??
           undefined;
+        const notifId: string = (raw.notificationId as string | undefined) ?? "";
 
-        addToInbox(title, body, data, imageUrl);
+        // Only add to inbox if this notification was NOT already added in foreground
+        if (notifId && _foregroundAddedIds.has(notifId)) {
+          _foregroundAddedIds.delete(notifId);
+        } else {
+          addToInbox(title, body, data, imageUrl);
+        }
 
         if (typeof data.url === "string" && data.url) {
           Linking.openURL(data.url).catch(() => {});

@@ -23,7 +23,6 @@ import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
 import { NotificationInboxProvider, useNotificationInbox } from "@/contexts/NotificationInboxContext";
 import type { NotifType } from "@/contexts/NotificationInboxContext";
 import { setupPushNotifications } from "@/lib/notifications";
-import { canLocalNotify } from "@/lib/localNotifications";
 import { logAppOpen } from "@/lib/analytics";
 import { ensureAnonymousAuth } from "@/lib/firebase";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";

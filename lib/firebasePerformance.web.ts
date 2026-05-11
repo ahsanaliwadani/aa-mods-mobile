@@ -5,10 +5,8 @@ let perfInstance: import("firebase/performance").FirebasePerformance | null = nu
 async function getPerf(): Promise<import("firebase/performance").FirebasePerformance | null> {
   if (perfInstance) return perfInstance;
   try {
-    const { getPerformance, isSupported } = await import("firebase/performance");
-    if (await isSupported()) {
-      perfInstance = getPerformance(app);
-    }
+    const { getPerformance } = await import("firebase/performance");
+    perfInstance = getPerformance(app);
   } catch {}
   return perfInstance;
 }

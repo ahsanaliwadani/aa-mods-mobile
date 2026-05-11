@@ -25,9 +25,11 @@ import {
 } from "@/lib/analytics";
 import { startTrace } from "@/lib/firebasePerformance";
 
+import type { DownloadResumable as _DownloadResumable } from "expo-file-system/legacy";
+
 const FileSystem =
   Platform.OS !== "web"
-    ? (require("expo-file-system/legacy") as typeof import("expo-file-system"))
+    ? (require("expo-file-system/legacy") as typeof import("expo-file-system/legacy"))
     : null;
 
 const IntentLauncher =
@@ -110,7 +112,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   const [downloads, setDownloads] = useState<Map<string, DownloadEntry>>(new Map());
   const [installedApps, setInstalledApps] = useState<Record<string, InstalledApp>>({});
 
-  const resumableRefs = useRef<Map<string, FileSystem.DownloadResumable>>(new Map());
+  const resumableRefs = useRef<Map<string, _DownloadResumable>>(new Map());
   const speedTracker = useRef<Map<string, { lastBytes: number; lastTime: number }>>(new Map());
 
   // Keep a ref in sync with state to avoid stale closures in callbacks
