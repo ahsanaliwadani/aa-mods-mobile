@@ -518,6 +518,38 @@ export default function HomeScreen() {
   const currentSort = SORT_OPTIONS.find((s) => s.key === sortKey)!;
   const qaIsFav = quickActionApp ? isFavorite(quickActionApp.slug) : false;
 
+  if (loading && apps.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <View style={styles.headerTop}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Image
+                source={require("@/assets/images/icon.png")}
+                style={{ width: 36, height: 36, borderRadius: 10 }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+              <View>
+                <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
+                <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
+          {[1, 2, 3, 4, 5].map((i) => <SkeletonAppCard key={i} />)}
+        </View>
+        <View style={[loadingStyles.banner, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={loadingStyles.dot} />
+          <Text style={[loadingStyles.text, { color: colors.mutedForeground }]}>
+            Loading apps from database…
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -770,4 +802,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   bellBadgeText: { color: "#04131b", fontSize: 8, fontWeight: "800", fontFamily: "Inter_700Bold" },
+});
+
+const loadingStyles = StyleSheet.create({
+  banner: {
+    position: "absolute",
+    bottom: 100,
+    left: 24,
+    right: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#00e673",
+  },
+  text: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+  },
 });

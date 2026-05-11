@@ -27,7 +27,7 @@ import { startTrace } from "@/lib/firebasePerformance";
 
 const FileSystem =
   Platform.OS !== "web"
-    ? (require("expo-file-system") as typeof import("expo-file-system"))
+    ? (require("expo-file-system/legacy") as typeof import("expo-file-system"))
     : null;
 
 const IntentLauncher =

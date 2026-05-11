@@ -1,11 +1,46 @@
 import { useState, useEffect, useRef } from "react";
 import { ref, onValue, type DataSnapshot } from "firebase/database";
-import { database } from "@/lib/firebase";
-import { storeApps, storeCategories as defaultCategories, type StoreCatalogApp } from "@/data/storeCatalog";
+import { database, FIREBASE_CONFIG } from "@/lib/firebase";
 import { logCatalogSynced, logCatalogError } from "@/lib/analytics";
 import { startTrace } from "@/lib/firebasePerformance";
 
 const BASE_ICON_URL = "https://aa-mods.vercel.app";
+const LOAD_TIMEOUT_MS = 3000;
+
+type DownloadButton = {
+  label: string;
+  link: string;
+  style: string;
+};
+
+export type StoreCatalogApp = {
+  version: string;
+  baseVersion: string;
+  updateDate: { display: string; iso: string };
+  directDownloadLink?: string;
+  downloadLink?: string;
+  downloadButtons?: readonly DownloadButton[];
+  slug: string;
+  name: string;
+  developer: string;
+  category: string;
+  rating: string;
+  downloads: string;
+  iconType: string;
+  iconImage?: string;
+  gradient: string;
+  subtitle: string;
+  shortDescription: string;
+  seoKeywords: string;
+};
+
+export type LiveStoreCatalogApp = StoreCatalogApp & {
+  isNew: boolean;
+  iconOverrideUri?: string;
+  changelog?: string[];
+  whatsNew?: string[];
+  packageName?: string;
+};
 
 function toArray<T>(val: unknown): T[] | undefined {
   if (val == null) return undefined;
@@ -27,14 +62,6 @@ function toArray<T>(val: unknown): T[] | undefined {
   }
   return undefined;
 }
-
-export type LiveStoreCatalogApp = StoreCatalogApp & {
-  isNew: boolean;
-  iconOverrideUri?: string;
-  changelog?: string[];
-  whatsNew?: string[];
-  packageName?: string;
-};
 
 function isNewApp(isoDate: string): boolean {
   if (!isoDate) return false;
@@ -77,61 +104,62 @@ function resolveIconOverride(raw: Record<string, unknown>): string | undefined {
 function parseFirebaseApp(
   slug: string,
   raw: Record<string, unknown>,
-  fallback?: StoreCatalogApp,
 ): LiveStoreCatalogApp {
   try {
     const rawUpdateDate = raw.updateDate;
-    const updateDateIsObj = rawUpdateDate != null && typeof rawUpdateDate === "object" && !Array.isArray(rawUpdateDate);
-    const updateDateObj = updateDateIsObj ? (rawUpdateDate as Record<string, unknown>) : null;
+    const updateDateIsObj =
+      rawUpdateDate != null &&
+      typeof rawUpdateDate === "object" &&
+      !Array.isArray(rawUpdateDate);
+    const updateDateObj = updateDateIsObj
+      ? (rawUpdateDate as Record<string, unknown>)
+      : null;
 
     const isoDate =
       (raw.lastUpdated as string) ||
       (raw.updatedAt as string) ||
-      (updateDateObj ? (updateDateObj.iso as string) : (rawUpdateDate as string)) ||
-      fallback?.updateDate?.iso ||
+      (updateDateObj
+        ? (updateDateObj.iso as string)
+        : (rawUpdateDate as string)) ||
       "";
     const displayDate =
       (raw.displayDate as string) ||
       (updateDateObj ? (updateDateObj.display as string) : undefined) ||
-      fallback?.updateDate?.display ||
       isoDate;
-    const version = (raw.version as string) || fallback?.version || "1.0";
 
-    type DownloadButton = { label: string; link: string; style: string };
-    const firebaseDownloadButtons = toArray<DownloadButton>(raw.downloadButtons);
-    const downloadButtons = firebaseDownloadButtons ?? fallback?.downloadButtons;
+    const version = (raw.version as string) || "1.0";
 
-    // When Firebase explicitly provides downloadButtons, those ARE the source of truth.
-    // Don't fall back to the local directDownloadLink (it may be outdated).
-    const directDownloadLink = (raw.directDownloadLink as string) ||
-      (firebaseDownloadButtons ? undefined : fallback?.directDownloadLink);
-    const downloadLink = (raw.downloadLink as string) ||
-      (firebaseDownloadButtons ? undefined : fallback?.downloadLink);
+    type DB = { label: string; link: string; style: string };
+    const firebaseDownloadButtons = toArray<DB>(raw.downloadButtons);
+
+    const directDownloadLink =
+      (raw.directDownloadLink as string) ||
+      (firebaseDownloadButtons ? undefined : undefined);
+    const downloadLink = (raw.downloadLink as string) || undefined;
 
     return {
       slug,
-      name: (raw.name as string) || fallback?.name || slug,
-      developer: (raw.developer as string) || fallback?.developer || "AA Mods",
-      category: (raw.category as string) || fallback?.category || "Utility Tools",
+      name: (raw.name as string) || slug,
+      developer: (raw.developer as string) || "AA Mods",
+      category: (raw.category as string) || "Utility Tools",
       version,
-      baseVersion: (raw.baseVersion as string) || fallback?.baseVersion || version,
+      baseVersion: (raw.baseVersion as string) || version,
       updateDate: { display: displayDate, iso: isoDate },
-      rating: (raw.rating as string) || fallback?.rating || "4.8",
-      downloads: (raw.downloads as string) || fallback?.downloads || "1K+",
-      subtitle: (raw.subtitle as string) || fallback?.subtitle || "",
+      rating: (raw.rating as string) || "4.8",
+      downloads: (raw.downloads as string) || "1K+",
+      subtitle: (raw.subtitle as string) || "",
       shortDescription:
         (raw.shortDescription as string) ||
         (raw.description as string) ||
-        fallback?.shortDescription ||
         "",
-      seoKeywords: (raw.seoKeywords as string) || fallback?.seoKeywords || "",
-      gradient: fallback?.gradient || "from-slate-900 to-slate-700",
-      iconType: fallback?.iconType || "default",
-      iconImage: resolveIcon(raw, fallback?.iconImage),
+      seoKeywords: (raw.seoKeywords as string) || "",
+      gradient: (raw.gradient as string) || "from-slate-900 to-slate-700",
+      iconType: (raw.iconType as string) || "default",
+      iconImage: resolveIcon(raw),
       iconOverrideUri: resolveIconOverride(raw),
       directDownloadLink,
       downloadLink,
-      downloadButtons,
+      downloadButtons: firebaseDownloadButtons ?? undefined,
       isNew: isNewApp(isoDate),
       changelog: toArray<string>(raw.changelog),
       whatsNew: toArray<string>(raw.whatsNew),
@@ -139,54 +167,45 @@ function parseFirebaseApp(
     };
   } catch {
     return {
-      ...(fallback ?? {
-        slug,
-        name: slug,
-        developer: "AA Mods",
-        category: "Utility Tools",
-        version: "1.0",
-        baseVersion: "1.0",
-        updateDate: { display: "", iso: "" },
-        rating: "4.8",
-        downloads: "1K+",
-        subtitle: "",
-        shortDescription: "",
-        seoKeywords: "",
-        gradient: "from-slate-900 to-slate-700",
-        iconType: "default" as const,
-      }),
+      slug,
+      name: slug,
+      developer: "AA Mods",
+      category: "Utility Tools",
+      version: "1.0",
+      baseVersion: "1.0",
+      updateDate: { display: "", iso: "" },
+      rating: "4.8",
+      downloads: "1K+",
+      subtitle: "",
+      shortDescription: "",
+      seoKeywords: "",
+      gradient: "from-slate-900 to-slate-700",
+      iconType: "default",
       isNew: false,
     };
   }
 }
 
-function buildCatalog(firebaseApps: Record<string, unknown> | null): LiveStoreCatalogApp[] {
-  try {
-    const fallbackMap = new Map(storeApps.map((a) => [a.slug, a]));
-    const resultMap = new Map<string, LiveStoreCatalogApp>(
-      storeApps.map((a) => [a.slug, { ...a, isNew: isNewApp(a.updateDate.iso) }]),
-    );
+function buildCatalog(
+  firebaseApps: Record<string, unknown>,
+): LiveStoreCatalogApp[] {
+  const resultMap = new Map<string, LiveStoreCatalogApp>();
 
-    if (firebaseApps) {
-      for (const [slug, value] of Object.entries(firebaseApps)) {
-        try {
-          if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-          const parsed = parseFirebaseApp(slug, value as Record<string, unknown>, fallbackMap.get(slug));
-          resultMap.set(slug, parsed);
-        } catch {
-          // skip malformed entry
-        }
-      }
+  for (const [slug, value] of Object.entries(firebaseApps)) {
+    try {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const parsed = parseFirebaseApp(slug, value as Record<string, unknown>);
+      resultMap.set(slug, parsed);
+    } catch {
+      // skip malformed entry
     }
-
-    return Array.from(resultMap.values()).sort((a, b) => {
-      const aIso = typeof a.updateDate?.iso === "string" ? a.updateDate.iso : "";
-      const bIso = typeof b.updateDate?.iso === "string" ? b.updateDate.iso : "";
-      return bIso.localeCompare(aIso);
-    });
-  } catch {
-    return storeApps.map((a) => ({ ...a, isNew: isNewApp(a.updateDate.iso) }));
   }
+
+  return Array.from(resultMap.values()).sort((a, b) => {
+    const aIso = typeof a.updateDate?.iso === "string" ? a.updateDate.iso : "";
+    const bIso = typeof b.updateDate?.iso === "string" ? b.updateDate.iso : "";
+    return bIso.localeCompare(aIso);
+  });
 }
 
 function deriveCategories(apps: LiveStoreCatalogApp[]): string[] {
@@ -194,85 +213,99 @@ function deriveCategories(apps: LiveStoreCatalogApp[]): string[] {
     const cats = Array.from(new Set(apps.map((a) => a.category))).sort();
     return ["All", ...cats];
   } catch {
-    return defaultCategories;
+    return ["All"];
   }
 }
 
 export function useFirebaseCatalog() {
-  const [apps, setApps] = useState<LiveStoreCatalogApp[]>(() =>
-    storeApps.map((a) => ({ ...a, isNew: isNewApp(a.updateDate.iso) })),
-  );
-  const [categories, setCategories] = useState<string[]>(defaultCategories);
+  const [apps, setApps] = useState<LiveStoreCatalogApp[]>([]);
+  const [categories, setCategories] = useState<string[]>(["All"]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const isMounted = useRef(true);
   const catalogTrace = useRef(startTrace("catalog_load"));
-  const hasFirstLoad = useRef(false);
 
   useEffect(() => {
     isMounted.current = true;
     catalogTrace.current = startTrace("catalog_load");
 
-    let unsubscribe: (() => void) | undefined;
-
-    try {
-      const appsRef = ref(database, "app_content/apps");
-
-      unsubscribe = onValue(
-        appsRef,
-        (snapshot: DataSnapshot) => {
-          if (!isMounted.current) return;
-          try {
-            const data = snapshot.val() as Record<string, unknown> | null;
-            const merged = buildCatalog(data);
-            setApps(merged);
-            setCategories(deriveCategories(merged));
-            setLoading(false);
-            setConnected(true);
-            setLastUpdated(new Date());
-
-            if (!hasFirstLoad.current) {
-              hasFirstLoad.current = true;
-              catalogTrace.current.stop({ app_count: String(merged.length), source: "firebase" });
-              logCatalogSynced(merged.length, 0, "firebase");
-            }
-          } catch (parseError) {
-            console.warn("[Firebase] Catalog parse error:", parseError);
-            if (isMounted.current) {
-              setLoading(false);
-              logCatalogError(parseError instanceof Error ? parseError.message : "parse_error");
-            }
-          }
-        },
-        (error) => {
-          console.warn("[Firebase] Catalog listener error:", error.message);
-          if (isMounted.current) {
-            setLoading(false);
-            setConnected(false);
-            if (!hasFirstLoad.current) {
-              hasFirstLoad.current = true;
-              catalogTrace.current.stop({ source: "error" });
-              logCatalogSynced(storeApps.length, 0, "cache");
-            }
-            logCatalogError(error.message);
-          }
-        },
-      );
-    } catch (setupError) {
-      console.warn("[Firebase] Catalog setup error:", setupError);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
       if (isMounted.current) {
         setLoading(false);
-        setConnected(false);
-        logCatalogError(setupError instanceof Error ? setupError.message : "setup_error");
+        catalogTrace.current.stop({ source: "timeout" });
+        logCatalogError("load_timeout");
       }
-    }
+    }, LOAD_TIMEOUT_MS);
+
+    const REST_URL = `${FIREBASE_CONFIG.databaseURL}/app_content/apps.json`;
+
+    fetch(REST_URL, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((data: Record<string, unknown> | null) => {
+        clearTimeout(timeoutId);
+        if (!isMounted.current) return;
+        try {
+          const merged = data ? buildCatalog(data) : [];
+          setApps(merged);
+          setCategories(deriveCategories(merged));
+          setConnected(true);
+          setLastUpdated(new Date());
+          catalogTrace.current.stop({
+            app_count: String(merged.length),
+            source: "firebase_rest",
+          });
+          logCatalogSynced(merged.length, 0, "firebase");
+        } catch (parseError) {
+          console.warn("[Firebase] Catalog parse error:", parseError);
+          logCatalogError(
+            parseError instanceof Error ? parseError.message : "parse_error",
+          );
+        } finally {
+          if (isMounted.current) setLoading(false);
+        }
+      })
+      .catch((error: Error) => {
+        if (error.name === "AbortError") return; // handled by timeout
+        clearTimeout(timeoutId);
+        if (!isMounted.current) return;
+        console.warn("[Firebase] Catalog load error:", error.message);
+        setConnected(false);
+        setLoading(false);
+        catalogTrace.current.stop({ source: "error" });
+        logCatalogError(error.message);
+      });
+
+    // Real-time listener for live updates after initial REST load settles
+    let unsubscribe: (() => void) | undefined;
+    const appsRef = ref(database, "app_content/apps");
+    const liveTimer = setTimeout(() => {
+      try {
+        unsubscribe = onValue(
+          appsRef,
+          (snapshot: DataSnapshot) => {
+            if (!isMounted.current) return;
+            try {
+              const data = snapshot.val() as Record<string, unknown> | null;
+              const merged = data ? buildCatalog(data) : [];
+              setApps(merged);
+              setCategories(deriveCategories(merged));
+              setConnected(true);
+              setLastUpdated(new Date());
+            } catch {}
+          },
+          () => {},
+        );
+      } catch {}
+    }, 1000);
 
     return () => {
       isMounted.current = false;
-      try {
-        unsubscribe?.();
-      } catch {}
+      clearTimeout(timeoutId);
+      clearTimeout(liveTimer);
+      try { unsubscribe?.(); } catch {}
     };
   }, []);
 
