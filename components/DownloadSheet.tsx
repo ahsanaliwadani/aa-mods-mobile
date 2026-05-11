@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Modal,
@@ -128,11 +129,29 @@ export function DownloadSheet({
     await dm.startDownload(appSlug, appName, appVersion, link, iconUri);
   };
 
+  const [saving, setSaving] = useState(false);
+
   const handleInstall = async () => {
     if (!appSlug) return;
     haptics.medium();
     await dm.installApk(appSlug);
     onClose();
+  };
+
+  const handleSaveToStorage = async () => {
+    if (!appSlug) return;
+    haptics.medium();
+    setSaving(true);
+    try {
+      const ok = await dm.saveApkToDownloads(appSlug);
+      if (ok) {
+        Alert.alert("Saved!", "APK has been saved to your selected folder.");
+      } else {
+        Alert.alert("Could not save", "Please try again or pick a different folder.");
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = async () => {
@@ -312,7 +331,7 @@ export function DownloadSheet({
                 <Text style={[styles.doneTitle, { color: colors.foreground }]}>Download Complete!</Text>
                 <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
                   {Platform.OS === "android"
-                    ? "Tap Install Now to begin installation."
+                    ? "APK is ready. Install it now or save to phone storage."
                     : "APK downloaded to AAMods folder."}
                 </Text>
               </View>
@@ -328,6 +347,71 @@ export function DownloadSheet({
                   <Ionicons name="hardware-chip-outline" size={20} color={colors.primaryForeground} />
                   <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>
                     Install Now
+                  </Text>
+                </Pressable>
+              )}
+
+              {Platform.OS === "android" && apkPath && !apkPath.startsWith("content://") && (
+                <Pressable
+                  onPress={handleSaveToStorage}
+                  disabled={saving}
+                  style={({ pressed }) => [
+                    styles.secondaryBtn,
+                    { borderColor: "rgba(251,191,36,0.4)", opacity: pressed || saving ? 0.7 : 1 },
+                  ]}
+                >
+                  <Ionicons name="folder-open-outline" size={16} color="#fbbf24" />
+                  <Text style={[styles.secondaryBtnText, { color: "#fbbf24" }]}>
+                    {saving ? "Saving…" : "Save to Phone Storage"}
+                  </Text>
+                </Pressable>
+              )}
+
+              <Pressable onPress={handleMinimize} style={[styles.cancelBtn, { borderColor: colors.border }]}>
+                <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Close</Text>
+              </Pressable>
+            </>
+          )}
+
+          {phase === "installed" && (
+            <>
+              <View style={styles.centerArea}>
+                <View style={[styles.doneCircle, { backgroundColor: "rgba(34,211,238,0.1)" }]}>
+                  <Ionicons name="checkmark-done-circle" size={40} color="#22d3ee" />
+                </View>
+                <Text style={[styles.doneTitle, { color: "#22d3ee" }]}>App Installed!</Text>
+                <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
+                  APK is saved on your device. You can reinstall at any time without re-downloading.
+                </Text>
+              </View>
+
+              {Platform.OS === "android" && apkPath && (
+                <Pressable
+                  onPress={handleInstall}
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    { backgroundColor: "#22d3ee", opacity: pressed ? 0.85 : 1 },
+                  ]}
+                >
+                  <Ionicons name="refresh-circle" size={20} color="#0a0a0a" />
+                  <Text style={[styles.primaryBtnText, { color: "#0a0a0a" }]}>
+                    Reinstall APK
+                  </Text>
+                </Pressable>
+              )}
+
+              {Platform.OS === "android" && apkPath && !apkPath.startsWith("content://") && (
+                <Pressable
+                  onPress={handleSaveToStorage}
+                  disabled={saving}
+                  style={({ pressed }) => [
+                    styles.secondaryBtn,
+                    { borderColor: "rgba(251,191,36,0.4)", opacity: pressed || saving ? 0.7 : 1 },
+                  ]}
+                >
+                  <Ionicons name="folder-open-outline" size={16} color="#fbbf24" />
+                  <Text style={[styles.secondaryBtnText, { color: "#fbbf24" }]}>
+                    {saving ? "Saving…" : "Save to Phone Storage"}
                   </Text>
                 </Pressable>
               )}

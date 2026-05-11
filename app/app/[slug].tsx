@@ -84,6 +84,7 @@ export default function AppDetailScreen() {
   const activeEntry = slug ? dm.getEntry(slug) : undefined;
   const isDownloading = activeEntry?.phase === "downloading" || activeEntry?.phase === "resolving";
   const downloadDone = activeEntry?.phase === "done";
+  const downloadInstalled = activeEntry?.phase === "installed";
   const installedVersion = slug ? dm.getInstalledVersion(slug) : null;
   const isInstalled = slug ? dm.isInstalled(slug) : false;
   const hasUpdate = slug && app ? dm.hasUpdate(slug, app.version) : false;
@@ -100,6 +101,12 @@ export default function AppDetailScreen() {
       dlSheet.open(activeEntry?.link ?? "", `Download ${app?.name ?? ""} APK`);
     }
   }, [downloadDone]);
+
+  useEffect(() => {
+    if (downloadInstalled && slug && !dlSheet.visible) {
+      dlSheet.open(activeEntry?.link ?? "", `Download ${app?.name ?? ""} APK`);
+    }
+  }, [downloadInstalled]);
 
   const handleFavoriteToggle = () => {
     if (!slug) return;
@@ -497,6 +504,14 @@ export default function AppDetailScreen() {
                 >
                   <Ionicons name="hardware-chip-outline" size={20} color={colors.primaryForeground} />
                   <Text style={[styles.primaryDownloadText, { color: colors.primaryForeground }]}>Install Now</Text>
+                </Pressable>
+              ) : downloadInstalled ? (
+                <Pressable
+                  onPress={() => dlSheet.open(primaryDownloadLink, `Download ${app.name} APK`)}
+                  style={({ pressed }) => [styles.primaryDownloadBtn, { backgroundColor: "#22d3ee", opacity: pressed ? 0.85 : 1 }]}
+                >
+                  <Ionicons name="refresh-circle" size={20} color="#0a0a0a" />
+                  <Text style={[styles.primaryDownloadText, { color: "#0a0a0a" }]}>Reinstall APK</Text>
                 </Pressable>
               ) : (
                 <Pressable
