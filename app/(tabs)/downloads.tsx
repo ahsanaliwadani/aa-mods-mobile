@@ -98,13 +98,14 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
   const handleSaveToDownloads = async () => {
     setSaving(true);
     haptics.medium();
-    const ok = await dm.saveApkToDownloads(entry.slug);
+    const result = await dm.saveApkToDownloads(entry.slug);
     setSaving(false);
-    if (ok) {
-      Alert.alert("Saved", `${entry.appName} APK has been saved to your selected folder.`);
-    } else {
-      Alert.alert("Error", "Could not save APK. Please try again.");
+    if (result === "saved") {
+      Alert.alert("Saved!", `${entry.appName} APK saved to your selected folder.`);
+    } else if (result === "error") {
+      Alert.alert("Save Failed", "Could not write the APK to the selected folder. Try picking a different folder, or check storage permissions.");
     }
+    // "cancelled" = user dismissed folder picker — no alert needed
   };
 
   return (

@@ -143,12 +143,13 @@ export function DownloadSheet({
     haptics.medium();
     setSaving(true);
     try {
-      const ok = await dm.saveApkToDownloads(appSlug);
-      if (ok) {
+      const result = await dm.saveApkToDownloads(appSlug);
+      if (result === "saved") {
         Alert.alert("Saved!", "APK has been saved to your selected folder.");
-      } else {
-        Alert.alert("Could not save", "Please try again or pick a different folder.");
+      } else if (result === "error") {
+        Alert.alert("Save Failed", "Could not write the APK to the selected folder. Try picking a different folder, or check storage permissions.");
       }
+      // "cancelled" = user dismissed folder picker — no alert needed
     } finally {
       setSaving(false);
     }

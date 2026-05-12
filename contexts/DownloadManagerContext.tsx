@@ -81,6 +81,7 @@ export type InstalledApp = {
 
 type DownloadManagerContextType = {
   downloads: Map<string, DownloadEntry>;
+  isRestoreComplete: boolean;
   startDownload: (
     slug: string,
     appName: string,
@@ -94,7 +95,7 @@ type DownloadManagerContextType = {
   clearEntry: (slug: string) => void;
   clearAllCompleted: () => void;
   getEntry: (slug: string) => DownloadEntry | undefined;
-  saveApkToDownloads: (slug: string) => Promise<boolean>;
+  saveApkToDownloads: (slug: string) => Promise<"saved" | "cancelled" | "error">;
   installedApps: Record<string, InstalledApp>;
   markInstalled: (slug: string, version: string) => void;
   isInstalled: (slug: string) => boolean;
@@ -137,6 +138,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   const [downloads, setDownloads] = useState<Map<string, DownloadEntry>>(new Map());
   const [installedApps, setInstalledApps] = useState<Record<string, InstalledApp>>({});
   const [downloadDirUri, setDownloadDirUriState] = useState<string | null>(null);
+  const [isRestoreComplete, setIsRestoreComplete] = useState(false);
 
   const resumableRefs = useRef<Map<string, _DownloadResumable>>(new Map());
   const speedTracker = useRef<Map<string, { lastBytes: number; lastTime: number }>>(new Map());
@@ -147,7 +149,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   }, [downloads]);
 
   useEffect(() => {
-    AsyncStorage.getItem(INSTALLED_APPS_KEY)
+    const loadInstalled = AsyncStorage.getItem(INSTALLED_APPS_KEY)
       .then((raw) => {
         if (raw) {
           const parsed = JSON.parse(raw) as unknown;
@@ -158,7 +160,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       })
       .catch(() => {});
 
-    AsyncStorage.getItem(DOWNLOADS_KEY)
+    const loadDownloads = AsyncStorage.getItem(DOWNLOADS_KEY)
       .then(async (raw) => {
         if (!raw) return;
         const arr = JSON.parse(raw) as DownloadEntry[];
@@ -195,11 +197,16 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       })
       .catch(() => {});
 
-    AsyncStorage.getItem(DOWNLOAD_DIR_KEY)
+    const loadDir = AsyncStorage.getItem(DOWNLOAD_DIR_KEY)
       .then((uri) => {
         if (uri) setDownloadDirUriState(uri);
       })
       .catch(() => {});
+
+    // Mark restore complete after all three loads settle (success or failure)
+    Promise.allSettled([loadInstalled, loadDownloads, loadDir]).then(() => {
+      setIsRestoreComplete(true);
+    });
   }, []);
 
   // Persist completed/installed/error entries
@@ -239,11 +246,11 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     return null;
   }, [setDownloadDir]);
 
-  const saveApkToDownloads = useCallback(async (slug: string): Promise<boolean> => {
-    if (Platform.OS !== "android" || !FileSystem) return false;
+  const saveApkToDownloads = useCallback(async (slug: string): Promise<"saved" | "cancelled" | "error"> => {
+    if (Platform.OS !== "android" || !FileSystem) return "error";
     const entry = downloadsRef.current.get(slug);
-    if (!entry?.apkPath) return false;
-    if (entry.apkPath.startsWith("content://")) return false;
+    if (!entry?.apkPath) return "error";
+    if (entry.apkPath.startsWith("content://")) return "error";
 
     const SAF = FileSystem.StorageAccessFramework;
     const safeName = entry.appName.replace(/[^a-zA-Z0-9]/g, "_");
@@ -272,7 +279,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     // Try previously saved directory first
     if (downloadDirUri) {
       const ok = await tryWriteToDir(downloadDirUri);
-      if (ok) return true;
+      if (ok) return "saved";
       // Saved URI failed (SAF permission may have expired) — clear it and re-request
       setDownloadDir(null);
     }
@@ -280,12 +287,13 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     // Request fresh directory permission from user
     try {
       const result = await SAF.requestDirectoryPermissionsAsync();
-      if (!result.granted || !result.directoryUri) return false;
+      if (!result.granted || !result.directoryUri) return "cancelled"; // user dismissed picker
       const newUri = result.directoryUri;
       setDownloadDir(newUri);
-      return await tryWriteToDir(newUri);
+      const ok = await tryWriteToDir(newUri);
+      return ok ? "saved" : "error";
     } catch {
-      return false;
+      return "error";
     }
   }, [downloadDirUri, setDownloadDir]);
 
@@ -693,6 +701,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     <DownloadManagerContext.Provider
       value={{
         downloads,
+        isRestoreComplete,
         startDownload,
         installApk,
         cancelDownload,

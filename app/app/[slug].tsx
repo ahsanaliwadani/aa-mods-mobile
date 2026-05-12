@@ -1,7 +1,7 @@
 import { Ionicons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -96,17 +96,19 @@ export default function AppDetailScreen() {
     }
   }, [slug, app?.name]);
 
+  // Auto-open the sheet once when a download finishes (so user sees Install Now).
+  // Guard with a ref so it only opens once per "done" state — not every re-navigation.
+  // Never auto-opens for the "installed" phase to avoid intrusive popups on navigation.
+  const doneSheetOpenedRef = useRef(false);
   useEffect(() => {
-    if (downloadDone && slug && !dlSheet.visible) {
+    if (downloadDone && slug && !dlSheet.visible && !doneSheetOpenedRef.current) {
+      doneSheetOpenedRef.current = true;
       dlSheet.open(activeEntry?.link ?? "", `Download ${app?.name ?? ""} APK`);
+    }
+    if (!downloadDone) {
+      doneSheetOpenedRef.current = false; // reset when no longer in done state
     }
   }, [downloadDone]);
-
-  useEffect(() => {
-    if (downloadInstalled && slug && !dlSheet.visible) {
-      dlSheet.open(activeEntry?.link ?? "", `Download ${app?.name ?? ""} APK`);
-    }
-  }, [downloadInstalled]);
 
   const handleFavoriteToggle = () => {
     if (!slug) return;
@@ -482,8 +484,10 @@ export default function AppDetailScreen() {
           <Text style={[styles.downloadSectionSubtitle, { color: colors.mutedForeground }]}>
             {hasUpdate
               ? `Update from v${installedVersion} to v${app.version}`
+              : downloadInstalled
+              ? `APK saved on device — reinstall without re-downloading`
               : isInstalled
-              ? `v${installedVersion} installed — re-download latest`
+              ? `v${installedVersion} installed — download to reinstall`
               : "Secure download via AA Mods verified link"}
           </Text>
 
