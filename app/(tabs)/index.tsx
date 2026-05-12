@@ -25,7 +25,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog, type LiveStoreCatalogApp } from "@/hooks/useFirebaseCatalog";
-import { useAppUpdateChecker } from "@/hooks/useAppUpdateChecker";
 import { useInstalledAppUpdates } from "@/hooks/useInstalledAppUpdates";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useUserData } from "@/contexts/UserDataContext";
@@ -37,9 +36,6 @@ import {
   logAppCardPress,
   logCategoryFilter,
   logSortChanged,
-  logUpdateBannerShown,
-  logUpdateBannerDismissed,
-  logUpdateBannerClicked,
   logFeaturedCardPress,
   logFavoriteToggle,
   logShareApp,
@@ -120,46 +116,6 @@ function LiveDot() {
   }, [pulse]);
   return <Animated.View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#00e673", opacity: pulse }} />;
 }
-
-function UpdateBanner({ version, url, notes, mandatory, onDismiss, onUpdate }: {
-  version: string; url: string; notes: string; mandatory: boolean;
-  onDismiss: () => void; onUpdate: (url: string) => void;
-}) {
-  const colors = useColors();
-  return (
-    <View style={[bannerStyles.banner, { backgroundColor: mandatory ? "rgba(255,68,68,0.08)" : colors.card, borderColor: mandatory ? "rgba(255,68,68,0.45)" : "rgba(0,230,115,0.4)" }]}>
-      <View style={bannerStyles.bannerLeft}>
-        <Ionicons name={mandatory ? "alert-circle" : "arrow-up-circle"} size={20} color={mandatory ? "#ff4444" : "#00e673"} />
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Text style={[bannerStyles.bannerTitle, { color: colors.foreground }]}>Update Available — v{version}</Text>
-            {mandatory && <View style={bannerStyles.requiredBadge}><Text style={bannerStyles.requiredBadgeText}>REQUIRED</Text></View>}
-          </View>
-          {notes ? <Text style={[bannerStyles.bannerNotes, { color: colors.mutedForeground }]} numberOfLines={1}>{notes}</Text> : null}
-        </View>
-      </View>
-      <View style={bannerStyles.bannerActions}>
-        <Pressable onPress={() => onUpdate(url)} style={[bannerStyles.updateBtn, { backgroundColor: mandatory ? "#ff4444" : "#00e673" }]}>
-          <Text style={[bannerStyles.updateBtnText, { color: "#fff" }]}>Update</Text>
-        </Pressable>
-        {!mandatory && <Pressable onPress={onDismiss} style={bannerStyles.dismissBtn} hitSlop={8}><Ionicons name="close" size={16} color={colors.mutedForeground} /></Pressable>}
-      </View>
-    </View>
-  );
-}
-
-const bannerStyles = StyleSheet.create({
-  banner: { flexDirection: "row", alignItems: "center", marginHorizontal: 16, marginTop: 10, borderRadius: 14, borderWidth: 1, padding: 12, gap: 10 },
-  bannerLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  bannerTitle: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold" },
-  bannerNotes: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
-  bannerActions: { flexDirection: "row", alignItems: "center", gap: 6 },
-  updateBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  updateBtnText: { fontSize: 12, fontWeight: "800", fontFamily: "Inter_700Bold" },
-  dismissBtn: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
-  requiredBadge: { backgroundColor: "rgba(255,68,68,0.15)", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  requiredBadgeText: { color: "#ff4444", fontSize: 8, fontWeight: "800", fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
-});
 
 function InstalledUpdatesBanner({ apps, onPress }: { apps: LiveStoreCatalogApp[]; onPress: () => void }) {
   const colors = useColors();
@@ -403,25 +359,15 @@ export default function HomeScreen() {
   const [quickActionApp, setQuickActionApp] = useState<LiveStoreCatalogApp | null>(null);
 
   const { apps, categories, loading, connected, lastUpdated, refetch } = useFirebaseCatalog();
-  const { updateInfo, shouldShow, isMandatory, dismiss } = useAppUpdateChecker();
   const { addItem: addInboxItem, unreadCount: inboxUnread } = useNotificationInbox();
   const { appsWithUpdates } = useInstalledAppUpdates(apps, addInboxItem);
   const { config } = useRemoteConfig();
   const { isFavorite, toggleFavorite } = useUserData();
   const dm = useDownloadManager();
 
-  const effectiveMandatory = isMandatory || config.updateBannerMandatory;
-  const shouldShowBanner = shouldShow && config.updateBannerEnabled;
-
   useEffect(() => {
     logScreenView("home");
   }, []);
-
-  useEffect(() => {
-    if (shouldShowBanner && updateInfo) {
-      logUpdateBannerShown(updateInfo.latestVersion, effectiveMandatory);
-    }
-  }, [shouldShowBanner, updateInfo, effectiveMandatory]);
 
   const filteredApps = useMemo(() => {
     let list = activeCategory === "All" ? apps : apps.filter((app) => app.category === activeCategory);
@@ -464,17 +410,6 @@ export default function HomeScreen() {
     const nextSort = SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length];
     setSortKey(nextSort.key);
     logSortChanged(nextSort.key);
-  };
-
-  const handleBannerDismiss = () => {
-    if (updateInfo) logUpdateBannerDismissed(updateInfo.latestVersion);
-    dismiss();
-  };
-
-  const handleBannerUpdate = (url: string) => {
-    if (updateInfo) logUpdateBannerClicked(updateInfo.latestVersion);
-    haptics.medium();
-    Linking.openURL(url);
   };
 
   const handleRefresh = async () => {
@@ -681,16 +616,6 @@ export default function HomeScreen() {
           <>
             {config.showAnnouncement && config.announcementText ? (
               <AnnouncementBanner text={config.announcementText} type={config.announcementType} />
-            ) : null}
-            {shouldShowBanner && updateInfo ? (
-              <UpdateBanner
-                version={updateInfo.latestVersion}
-                url={updateInfo.downloadUrl}
-                notes={updateInfo.releaseNotes}
-                mandatory={effectiveMandatory}
-                onDismiss={handleBannerDismiss}
-                onUpdate={handleBannerUpdate}
-              />
             ) : null}
             {appsWithUpdates.length > 0 && (
               <InstalledUpdatesBanner

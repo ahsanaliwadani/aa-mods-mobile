@@ -18,6 +18,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
+import { AppUpdateModal } from "@/components/AppUpdateModal";
 import { UserDataProvider } from "@/contexts/UserDataContext";
 import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
 import { NotificationInboxProvider, useNotificationInbox } from "@/contexts/NotificationInboxContext";
@@ -176,6 +177,8 @@ function RootLayoutNav() {
   }
 
   return (
+    <>
+    <AppUpdateModal />
     <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="app/[slug]" options={{ headerShown: false, animation: "slide_from_right" }} />
@@ -185,6 +188,7 @@ function RootLayoutNav() {
       <Stack.Screen name="terms" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="disclaimer" options={{ headerShown: false, animation: "slide_from_right" }} />
     </Stack>
+    </>
   );
 }
 
