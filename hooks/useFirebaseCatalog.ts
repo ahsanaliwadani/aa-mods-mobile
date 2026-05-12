@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ref, onValue, type DataSnapshot } from "firebase/database";
 import { database, FIREBASE_CONFIG } from "@/lib/firebase";
 import { logCatalogSynced, logCatalogError } from "@/lib/analytics";
@@ -223,8 +223,15 @@ export function useFirebaseCatalog() {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [fetchTick, setFetchTick] = useState(0);
   const isMounted = useRef(true);
   const catalogTrace = useRef(startTrace("catalog_load"));
+
+  const refetch = useCallback(() => {
+    setLoading(true);
+    setConnected(false);
+    setFetchTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
     isMounted.current = true;
@@ -307,9 +314,9 @@ export function useFirebaseCatalog() {
       clearTimeout(liveTimer);
       try { unsubscribe?.(); } catch {}
     };
-  }, []);
+  }, [fetchTick]);
 
   const newCount = apps.filter((a) => a.isNew).length;
 
-  return { apps, categories, loading, connected, lastUpdated, newCount };
+  return { apps, categories, loading, connected, lastUpdated, newCount, refetch };
 }

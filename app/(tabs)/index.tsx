@@ -402,7 +402,7 @@ export default function HomeScreen() {
   const [sortKey, setSortKey] = useState<SortKey>("newest");
   const [quickActionApp, setQuickActionApp] = useState<LiveStoreCatalogApp | null>(null);
 
-  const { apps, categories, loading, connected, lastUpdated } = useFirebaseCatalog();
+  const { apps, categories, loading, connected, lastUpdated, refetch } = useFirebaseCatalog();
   const { updateInfo, shouldShow, isMandatory, dismiss } = useAppUpdateChecker();
   const { addItem: addInboxItem, unreadCount: inboxUnread } = useNotificationInbox();
   const { appsWithUpdates } = useInstalledAppUpdates(apps, addInboxItem);
@@ -544,6 +544,48 @@ export default function HomeScreen() {
           <View style={loadingStyles.dot} />
           <Text style={[loadingStyles.text, { color: colors.mutedForeground }]}>
             Loading apps from database…
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!loading && !connected && apps.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <View style={styles.headerTop}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Image
+                source={require("@/assets/images/icon.png")}
+                style={{ width: 36, height: 36, borderRadius: 10 }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+              <View>
+                <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
+                <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+        <View style={offlineStyles.container}>
+          <View style={[offlineStyles.iconWrap, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.2)" }]}>
+            <Ionicons name="wifi-outline" size={48} color="#ef4444" style={{ opacity: 0.7 }} />
+          </View>
+          <Text style={[offlineStyles.title, { color: colors.foreground }]}>No Internet Connection</Text>
+          <Text style={[offlineStyles.subtitle, { color: colors.mutedForeground }]}>
+            Could not load apps. Please check your internet connection or mobile data and try again.
+          </Text>
+          <Pressable
+            onPress={() => { haptics.medium(); refetch(); }}
+            style={({ pressed }) => [offlineStyles.retryBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Ionicons name="refresh" size={16} color={colors.primaryForeground} />
+            <Text style={[offlineStyles.retryBtnText, { color: colors.primaryForeground }]}>Try Again</Text>
+          </Pressable>
+          <Text style={[offlineStyles.hint, { color: colors.mutedForeground }]}>
+            Make sure Wi-Fi or mobile data is turned on
           </Text>
         </View>
       </View>
@@ -827,5 +869,57 @@ const loadingStyles = StyleSheet.create({
   text: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
+  },
+});
+
+const offlineStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    gap: 14,
+  },
+  iconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "800",
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 22,
+    maxWidth: 290,
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 28,
+    marginTop: 6,
+  },
+  retryBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    fontFamily: "Inter_700Bold",
+  },
+  hint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    opacity: 0.6,
   },
 });

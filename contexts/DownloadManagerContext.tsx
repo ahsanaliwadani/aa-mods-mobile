@@ -159,24 +159,39 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       .catch(() => {});
 
     AsyncStorage.getItem(DOWNLOADS_KEY)
-      .then((raw) => {
+      .then(async (raw) => {
         if (!raw) return;
         const arr = JSON.parse(raw) as DownloadEntry[];
         if (!Array.isArray(arr) || arr.length === 0) return;
-        setDownloads((prev) => {
-          const next = new Map(prev);
-          for (const entry of arr) {
-            if (
-              entry.slug &&
-              (entry.phase === "done" ||
-                entry.phase === "error" ||
-                entry.phase === "installed")
-            ) {
+
+        const validEntries: DownloadEntry[] = [];
+        for (const entry of arr) {
+          if (!entry.slug) continue;
+          if (entry.phase === "done" || entry.phase === "installed") {
+            // Verify APK file still exists on disk before restoring
+            if (entry.apkPath && !entry.apkPath.startsWith("content://") && FileSystem) {
+              try {
+                const info = await FileSystem.getInfoAsync(entry.apkPath);
+                if (!info.exists) continue; // File gone — skip, user will need to re-download
+              } catch {
+                continue;
+              }
+            }
+            validEntries.push(entry);
+          } else if (entry.phase === "error") {
+            validEntries.push(entry);
+          }
+        }
+
+        if (validEntries.length > 0) {
+          setDownloads((prev) => {
+            const next = new Map(prev);
+            for (const entry of validEntries) {
               next.set(entry.slug, entry);
             }
-          }
-          return next;
-        });
+            return next;
+          });
+        }
       })
       .catch(() => {});
 
@@ -228,40 +243,47 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     if (Platform.OS !== "android" || !FileSystem) return false;
     const entry = downloadsRef.current.get(slug);
     if (!entry?.apkPath) return false;
-    if (entry.apkPath.startsWith("content://")) return false; // Already in SAF
+    if (entry.apkPath.startsWith("content://")) return false;
 
-    let targetUri = downloadDirUri;
+    const SAF = FileSystem.StorageAccessFramework;
+    const safeName = entry.appName.replace(/[^a-zA-Z0-9]/g, "_");
+    const fileName = `${safeName}_v${entry.storeVersion}.apk`;
+    const apkPath = entry.apkPath;
 
-    if (!targetUri) {
-      // Ask user to pick a folder
+    const tryWriteToDir = async (dirUri: string): Promise<boolean> => {
       try {
-        const SAF = FileSystem.StorageAccessFramework;
-        const result = await SAF.requestDirectoryPermissionsAsync();
-        if (!result.granted || !result.directoryUri) return false;
-        targetUri = result.directoryUri;
-        setDownloadDir(targetUri);
+        const destUri = await SAF.createFileAsync(
+          dirUri,
+          fileName,
+          "application/vnd.android.package-archive",
+        );
+        const content = await FileSystem.readAsStringAsync(apkPath, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        await FileSystem.writeAsStringAsync(destUri, content, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        return true;
       } catch {
         return false;
       }
+    };
+
+    // Try previously saved directory first
+    if (downloadDirUri) {
+      const ok = await tryWriteToDir(downloadDirUri);
+      if (ok) return true;
+      // Saved URI failed (SAF permission may have expired) — clear it and re-request
+      setDownloadDir(null);
     }
 
+    // Request fresh directory permission from user
     try {
-      const SAF = FileSystem.StorageAccessFramework;
-      const safeName = entry.appName.replace(/[^a-zA-Z0-9]/g, "_");
-      const fileName = `${safeName}_v${entry.storeVersion}.apk`;
-
-      const content = await FileSystem.readAsStringAsync(entry.apkPath, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const destUri = await SAF.createFileAsync(
-        targetUri,
-        fileName,
-        "application/vnd.android.package-archive",
-      );
-      await FileSystem.writeAsStringAsync(destUri, content, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      return true;
+      const result = await SAF.requestDirectoryPermissionsAsync();
+      if (!result.granted || !result.directoryUri) return false;
+      const newUri = result.directoryUri;
+      setDownloadDir(newUri);
+      return await tryWriteToDir(newUri);
     } catch {
       return false;
     }
@@ -495,6 +517,37 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     async (slug: string) => {
       const entry = downloadsRef.current.get(slug);
       if (!entry?.apkPath || Platform.OS !== "android") return;
+
+      // Verify the APK file still exists on disk before attempting install
+      if (FileSystem && !entry.apkPath.startsWith("content://")) {
+        try {
+          const info = await FileSystem.getInfoAsync(entry.apkPath);
+          if (!info.exists) {
+            // File is gone — remove entry so the Download button appears fresh
+            setDownloads((prev) => {
+              const next = new Map(prev);
+              next.delete(slug);
+              return next;
+            });
+            Alert.alert(
+              "APK Not Found",
+              "The APK file was removed from device storage. Please download it again.",
+            );
+            return;
+          }
+        } catch {
+          setDownloads((prev) => {
+            const next = new Map(prev);
+            next.delete(slug);
+            return next;
+          });
+          Alert.alert(
+            "APK Not Found",
+            "Could not access the APK file. Please download it again.",
+          );
+          return;
+        }
+      }
 
       updateEntry(slug, { phase: "installing" });
       try {
