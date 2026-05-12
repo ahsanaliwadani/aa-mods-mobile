@@ -13,14 +13,22 @@ export type AppUpdateInfo = {
   source: "appUpdate" | "remoteConfig";
 };
 
-const CURRENT_VERSION = Constants.expoConfig?.version ?? "1.0.0";
+// Read version from app.json/app.config.js, fallback to "1.0.0"
+export const CURRENT_VERSION: string =
+  Constants.expoConfig?.version ??
+  Constants.manifest2?.runtimeVersion ??
+  Constants.manifest?.version ??
+  "1.0.0";
+
 const DISMISSED_VERSION_KEY = "@aa_mods_dismissed_update_version";
 
-function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number {
   try {
-    const pa = a.replace(/^v/, "").split(".").map(Number);
-    const pb = b.replace(/^v/, "").split(".").map(Number);
-    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const clean = (v: string) => v.replace(/^v/i, "").trim();
+    const pa = clean(a).split(".").map((n) => parseInt(n, 10) || 0);
+    const pb = clean(b).split(".").map((n) => parseInt(n, 10) || 0);
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
       const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
       if (diff !== 0) return diff;
     }
@@ -32,11 +40,11 @@ function compareVersions(a: string, b: string): number {
 
 export function useAppUpdateChecker() {
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
-  const [rcUpdateInfo, setRcUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
   const [storageLoaded, setStorageLoaded] = useState(false);
   const isMounted = useRef(true);
 
+  // Load dismissed version from storage
   useEffect(() => {
     AsyncStorage.getItem(DISMISSED_VERSION_KEY)
       .then((v) => { if (isMounted.current) setDismissedVersion(v); })
@@ -44,7 +52,7 @@ export function useAppUpdateChecker() {
       .finally(() => { if (isMounted.current) setStorageLoaded(true); });
   }, []);
 
-  // Listen to app_config/appUpdate
+  // Realtime listener on app_config/appUpdate
   useEffect(() => {
     isMounted.current = true;
     let unsubscribe: (() => void) | undefined;
@@ -57,18 +65,26 @@ export function useAppUpdateChecker() {
           if (!isMounted.current) return;
           try {
             const data = snapshot.val() as Record<string, unknown> | null;
-            if (!data) return;
-            const latestVersion = (data.latestVersion as string) || CURRENT_VERSION;
-            const downloadUrl = (data.downloadUrl as string) || "";
-            const releaseNotes = (data.releaseNotes as string) || "";
-            const mandatory = Boolean(data.mandatory);
-            const hasUpdate = compareVersions(latestVersion, CURRENT_VERSION) > 0;
+            if (!data) {
+              setUpdateInfo(null);
+              return;
+            }
+            const latestVersion = String(data.latestVersion ?? "").trim();
+            const downloadUrl = String(data.downloadUrl ?? "").trim();
+            const releaseNotes = String(data.releaseNotes ?? "").trim();
+            const mandatory = data.mandatory === true || data.mandatory === "true";
+            // Only show banner if database version is strictly higher than current
+            const hasUpdate = !!latestVersion && compareVersions(latestVersion, CURRENT_VERSION) > 0;
             setUpdateInfo({ latestVersion, downloadUrl, releaseNotes, mandatory, hasUpdate, source: "appUpdate" });
-          } catch {}
+          } catch {
+            setUpdateInfo(null);
+          }
         },
-        () => {},
+        () => { setUpdateInfo(null); },
       );
-    } catch {}
+    } catch {
+      setUpdateInfo(null);
+    }
 
     return () => {
       isMounted.current = false;
@@ -76,52 +92,8 @@ export function useAppUpdateChecker() {
     };
   }, []);
 
-  // Also listen to app_config/remoteConfig for updateBanner fields as a second source
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    try {
-      const configRef = ref(database, "app_config/remoteConfig");
-      unsubscribe = onValue(
-        configRef,
-        (snapshot) => {
-          if (!isMounted.current) return;
-          try {
-            const data = snapshot.val() as Record<string, unknown> | null;
-            if (!data) return;
-            const bannerVersion = (data.updateBannerVersion as string) || "";
-            const bannerUrl = (data.updateBannerUrl as string) || "";
-            const bannerMsg = (data.updateBannerMessage as string) || "";
-            const bannerMandatory = Boolean(data.updateBannerMandatory);
-            if (bannerVersion) {
-              const hasUpdate = compareVersions(bannerVersion, CURRENT_VERSION) > 0;
-              setRcUpdateInfo({
-                latestVersion: bannerVersion,
-                downloadUrl: bannerUrl,
-                releaseNotes: bannerMsg,
-                mandatory: bannerMandatory,
-                hasUpdate,
-                source: "remoteConfig",
-              });
-            }
-          } catch {}
-        },
-        () => {},
-      );
-    } catch {}
-
-    return () => {
-      try { unsubscribe?.(); } catch {}
-    };
-  }, []);
-
-  const activeInfo = updateInfo?.hasUpdate
-    ? updateInfo
-    : rcUpdateInfo?.hasUpdate
-    ? rcUpdateInfo
-    : null;
-
   const dismiss = (): void => {
-    const version = activeInfo?.latestVersion;
+    const version = updateInfo?.latestVersion;
     if (!version) return;
     setDismissedVersion(version);
     AsyncStorage.setItem(DISMISSED_VERSION_KEY, version).catch(() => {});
@@ -129,10 +101,10 @@ export function useAppUpdateChecker() {
 
   const shouldShow =
     storageLoaded &&
-    !!activeInfo?.hasUpdate &&
-    dismissedVersion !== activeInfo?.latestVersion;
+    !!updateInfo?.hasUpdate &&
+    dismissedVersion !== updateInfo?.latestVersion;
 
-  const isMandatory = !!activeInfo?.mandatory;
+  const isMandatory = !!updateInfo?.mandatory;
 
-  return { updateInfo: activeInfo, shouldShow, isMandatory, dismiss };
+  return { updateInfo, shouldShow, isMandatory, dismiss, currentVersion: CURRENT_VERSION };
 }

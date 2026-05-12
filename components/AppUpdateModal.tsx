@@ -61,7 +61,7 @@ function PulseRing({ delay, size, color }: { delay: number; size: number; color:
 
 export function AppUpdateModal() {
   const insets = useSafeAreaInsets();
-  const { updateInfo, shouldShow, isMandatory, dismiss } = useAppUpdateChecker();
+  const { updateInfo, shouldShow, isMandatory, dismiss, currentVersion } = useAppUpdateChecker();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.90)).current;
@@ -164,7 +164,7 @@ export function AppUpdateModal() {
               <View style={styles.versionRow}>
                 <View style={styles.versionChip}>
                   <Text style={styles.versionChipLabel}>Current</Text>
-                  <Text style={styles.versionChipValue}>v1.0.0</Text>
+                  <Text style={styles.versionChipValue}>v{currentVersion}</Text>
                 </View>
                 <View style={styles.versionArrow}>
                   <Ionicons name="arrow-forward" size={13} color="#ff4444" />

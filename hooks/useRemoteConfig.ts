@@ -15,7 +15,13 @@ export type AppRemoteConfig = {
   updateBannerUrl: string;
   updateBannerVersion: string;
   updateBannerButtonText: string;
+  // App rating controls
   appRatingEnabled: boolean;
+  appRatingMinOpens: number;       // show prompt after N app opens
+  appRatingMinDownloads: number;   // OR after N downloads
+  appRatingForceShow: boolean;     // override: show to everyone ignoring history
+  appRatingPlayStoreUrl: string;   // Play Store URL for the "Rate" button
+  // Social / contact
   telegramUrl: string;
   websiteUrl: string;
   discordUrl: string;
@@ -36,7 +42,11 @@ export const defaultRemoteConfig: AppRemoteConfig = {
   updateBannerUrl: "",
   updateBannerVersion: "",
   updateBannerButtonText: "Update Now",
-  appRatingEnabled: true,
+  appRatingEnabled: false,
+  appRatingMinOpens: 4,
+  appRatingMinDownloads: 2,
+  appRatingForceShow: false,
+  appRatingPlayStoreUrl: "https://play.google.com/store/apps/details?id=com.aa.mods",
   telegramUrl: "https://t.me/aamods",
   websiteUrl: "https://aa-mods.replit.app",
   discordUrl: "",
@@ -53,6 +63,11 @@ function safeBoolean(val: unknown, fallback: boolean): boolean {
 
 function safeString(val: unknown, fallback: string): string {
   return typeof val === "string" && val.trim().length > 0 ? val.trim() : fallback;
+}
+
+function safeNumber(val: unknown, fallback: number): number {
+  const n = Number(val);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
 }
 
 function parseConfig(raw: Record<string, unknown>): AppRemoteConfig {
@@ -75,6 +90,10 @@ function parseConfig(raw: Record<string, unknown>): AppRemoteConfig {
       updateBannerVersion: safeString(raw.updateBannerVersion, defaultRemoteConfig.updateBannerVersion),
       updateBannerButtonText: safeString(raw.updateBannerButtonText, defaultRemoteConfig.updateBannerButtonText),
       appRatingEnabled: safeBoolean(raw.appRatingEnabled, defaultRemoteConfig.appRatingEnabled),
+      appRatingMinOpens: safeNumber(raw.appRatingMinOpens, defaultRemoteConfig.appRatingMinOpens),
+      appRatingMinDownloads: safeNumber(raw.appRatingMinDownloads, defaultRemoteConfig.appRatingMinDownloads),
+      appRatingForceShow: safeBoolean(raw.appRatingForceShow, defaultRemoteConfig.appRatingForceShow),
+      appRatingPlayStoreUrl: safeString(raw.appRatingPlayStoreUrl, defaultRemoteConfig.appRatingPlayStoreUrl),
       telegramUrl: safeString(raw.telegramUrl, defaultRemoteConfig.telegramUrl),
       websiteUrl: safeString(raw.websiteUrl, defaultRemoteConfig.websiteUrl),
       discordUrl: safeString(raw.discordUrl, defaultRemoteConfig.discordUrl),
@@ -110,7 +129,6 @@ export function useRemoteConfig() {
           }
         },
         () => {
-          // Firebase permission denied — use defaults silently
           if (isMounted.current) setLoaded(true);
         },
       );

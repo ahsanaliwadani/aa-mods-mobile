@@ -19,6 +19,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 import { AppUpdateModal } from "@/components/AppUpdateModal";
+import { AnnouncementBanner } from "@/components/AnnouncementBanner";
+import { AppRatingModal } from "@/components/AppRatingModal";
+import { useAppRating, submitRatingToFirebase } from "@/hooks/useAppRating";
 import { UserDataProvider } from "@/contexts/UserDataContext";
 import { DownloadManagerProvider } from "@/contexts/DownloadManagerContext";
 import { NotificationInboxProvider, useNotificationInbox } from "@/contexts/NotificationInboxContext";
@@ -93,6 +96,7 @@ function RootLayoutNav() {
   const { config, loaded } = useRemoteConfig();
   const { addItem } = useNotificationInbox();
   const dm = useDownloadManager();
+  const { shouldShowRating, recordDownload, dismiss: dismissRating, markRated } = useAppRating(config);
 
   // Track download phase changes → always add to inbox (and also fire local push notification separately)
   useEffect(() => {
@@ -105,12 +109,13 @@ function RootLayoutNav() {
         addItem({ title: "Download Started", body: `Downloading ${entry.appName}…`, type: "download_start", data: { slug, appName: entry.appName } });
       } else if (entry.phase === "done" && prev && prev !== "done") {
         addItem({ title: "Download Complete ✓", body: `${entry.appName} is ready to install!`, type: "download_done", data: { slug, appName: entry.appName } });
+        recordDownload();
       } else if (entry.phase === "error" && prev && prev !== "error") {
         addItem({ title: "Download Failed", body: `${entry.appName}: ${(entry.error ?? "Unknown error").slice(0, 100)}`, type: "download_error", data: { slug, appName: entry.appName } });
       }
     }
     prevPhasesRef.current = newPhases;
-  }, [dm.downloads, addItem]);
+  }, [dm.downloads, addItem, recordDownload]);
 
   useEffect(() => {
     logAppOpen();
@@ -178,16 +183,28 @@ function RootLayoutNav() {
 
   return (
     <>
-    <AppUpdateModal />
-    <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="app/[slug]" options={{ headerShown: false, animation: "slide_from_right" }} />
-      <Stack.Screen name="inbox" options={{ headerShown: false, animation: "slide_from_right" }} />
-      <Stack.Screen name="about" options={{ headerShown: false, animation: "slide_from_right" }} />
-      <Stack.Screen name="privacy" options={{ headerShown: false, animation: "slide_from_right" }} />
-      <Stack.Screen name="terms" options={{ headerShown: false, animation: "slide_from_right" }} />
-      <Stack.Screen name="disclaimer" options={{ headerShown: false, animation: "slide_from_right" }} />
-    </Stack>
+      <AppUpdateModal />
+      {/* Announcement banner — centered overlay modal, shown when Firebase enables it */}
+      {loaded && config.showAnnouncement && config.announcementText ? (
+        <AnnouncementBanner text={config.announcementText} type={config.announcementType} />
+      ) : null}
+      {/* In-app rating prompt — controlled entirely by Firebase remoteConfig */}
+      <AppRatingModal
+        visible={shouldShowRating}
+        onDismiss={dismissRating}
+        onRated={markRated}
+        onSubmitRating={submitRatingToFirebase}
+        playStoreUrl={config.appRatingPlayStoreUrl}
+      />
+      <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="app/[slug]" options={{ headerShown: false, animation: "slide_from_right" }} />
+        <Stack.Screen name="inbox" options={{ headerShown: false, animation: "slide_from_right" }} />
+        <Stack.Screen name="about" options={{ headerShown: false, animation: "slide_from_right" }} />
+        <Stack.Screen name="privacy" options={{ headerShown: false, animation: "slide_from_right" }} />
+        <Stack.Screen name="terms" options={{ headerShown: false, animation: "slide_from_right" }} />
+        <Stack.Screen name="disclaimer" options={{ headerShown: false, animation: "slide_from_right" }} />
+      </Stack>
     </>
   );
 }

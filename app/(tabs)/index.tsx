@@ -30,7 +30,7 @@ import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useUserData } from "@/contexts/UserDataContext";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { useNotificationInbox } from "@/contexts/NotificationInboxContext";
-import { AnnouncementBanner } from "@/components/AnnouncementBanner";
+
 import {
   logScreenView,
   logAppCardPress,
@@ -614,9 +614,7 @@ export default function HomeScreen() {
         }
         ListHeaderComponent={
           <>
-            {config.showAnnouncement && config.announcementText ? (
-              <AnnouncementBanner text={config.announcementText} type={config.announcementType} />
-            ) : null}
+            {null /* Announcement banner is rendered as a root-level modal overlay */}
             {appsWithUpdates.length > 0 && (
               <InstalledUpdatesBanner
                 apps={appsWithUpdates}
