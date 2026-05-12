@@ -119,6 +119,15 @@ export function DownloadSheet({
     if (!link) return;
     haptics.medium();
 
+    // On web: open the download URL directly in the browser
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined") {
+        window.open(link, "_blank");
+      }
+      onClose();
+      return;
+    }
+
     if (isNonResolvable) {
       onClose();
       await openInBrowser(link);
@@ -211,12 +220,14 @@ export function DownloadSheet({
             <>
               <View style={[styles.infoBox, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
                 <Ionicons
-                  name={isNonResolvable ? "globe-outline" : isMediaFireUrl(link) ? "cloud-download-outline" : "download-outline"}
+                  name={Platform.OS === "web" ? "globe-outline" : isNonResolvable ? "globe-outline" : isMediaFireUrl(link) ? "cloud-download-outline" : "download-outline"}
                   size={16}
                   color={colors.primary}
                 />
                 <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-                  {isNonResolvable
+                  {Platform.OS === "web"
+                    ? "Your browser will download the APK file directly to your Downloads folder."
+                    : isNonResolvable
                     ? "Download page will open inside the app — no external browser needed."
                     : isMediaFireUrl(link)
                     ? "MediaFire link detected — will resolve direct APK link and download in-app."
@@ -232,16 +243,22 @@ export function DownloadSheet({
                 ]}
               >
                 <Ionicons
-                  name={isNonResolvable ? "open-outline" : "download"}
+                  name={Platform.OS === "web" ? "open-outline" : isNonResolvable ? "open-outline" : "download"}
                   size={20}
                   color={colors.primaryForeground}
                 />
                 <Text style={[styles.primaryBtnText, { color: colors.primaryForeground }]}>
-                  {isNonResolvable ? "Open Download Page" : isMediaFireUrl(link) ? "Resolve & Download APK" : "Download APK"}
+                  {Platform.OS === "web"
+                    ? "Download APK"
+                    : isNonResolvable
+                    ? "Open Download Page"
+                    : isMediaFireUrl(link)
+                    ? "Resolve & Download APK"
+                    : "Download APK"}
                 </Text>
               </Pressable>
 
-              {isMediaFireUrl(link) && (
+              {Platform.OS !== "web" && isMediaFireUrl(link) && (
                 <Pressable onPress={handleOpenInBrowser} style={[styles.secondaryBtn, { borderColor: colors.border }]}>
                   <Ionicons name="globe-outline" size={15} color={colors.accent} />
                   <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>Open in Browser Instead</Text>

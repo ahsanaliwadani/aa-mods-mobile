@@ -148,6 +148,12 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     downloadsRef.current = downloads;
   }, [downloads]);
 
+  // Keep a ref so startDownload can always read the latest downloadDirUri
+  const downloadDirUriRef = useRef<string | null>(downloadDirUri);
+  useEffect(() => {
+    downloadDirUriRef.current = downloadDirUri;
+  }, [downloadDirUri]);
+
   useEffect(() => {
     const loadInstalled = AsyncStorage.getItem(INSTALLED_APPS_KEY)
       .then((raw) => {
@@ -199,7 +205,10 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
     const loadDir = AsyncStorage.getItem(DOWNLOAD_DIR_KEY)
       .then((uri) => {
-        if (uri) setDownloadDirUriState(uri);
+        if (uri) {
+          setDownloadDirUriState(uri);
+          downloadDirUriRef.current = uri;
+        }
       })
       .catch(() => {});
 
@@ -226,6 +235,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
   const setDownloadDir = useCallback((uri: string | null) => {
     setDownloadDirUriState(uri);
+    downloadDirUriRef.current = uri;
     if (uri) {
       AsyncStorage.setItem(DOWNLOAD_DIR_KEY, uri).catch(() => {});
     } else {
@@ -246,56 +256,72 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     return null;
   }, [setDownloadDir]);
 
+  // Write APK bytes to a SAF directory. Reads source BEFORE creating destination
+  // so a failed read never leaves a 0B file behind.
+  const writeApkToSafDir = useCallback(async (
+    apkPath: string,
+    dirUri: string,
+    fileName: string,
+  ): Promise<string | null> => {
+    if (!FileSystem) return null;
+    const SAF = FileSystem.StorageAccessFramework;
+    try {
+      // 1. Read source first — if this throws, nothing is created at dest
+      const content = await FileSystem.readAsStringAsync(apkPath, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      if (!content || content.length === 0) return null;
+
+      // 2. Create destination file only after we have valid content
+      const destUri = await SAF.createFileAsync(
+        dirUri,
+        fileName,
+        "application/vnd.android.package-archive",
+      );
+
+      // 3. Write content
+      await FileSystem.writeAsStringAsync(destUri, content, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      return destUri;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const saveApkToDownloads = useCallback(async (slug: string): Promise<"saved" | "cancelled" | "error"> => {
     if (Platform.OS !== "android" || !FileSystem) return "error";
     const entry = downloadsRef.current.get(slug);
     if (!entry?.apkPath) return "error";
-    if (entry.apkPath.startsWith("content://")) return "error";
+    if (entry.apkPath.startsWith("content://")) return "saved"; // already in permanent storage
 
-    const SAF = FileSystem.StorageAccessFramework;
     const safeName = entry.appName.replace(/[^a-zA-Z0-9]/g, "_");
     const fileName = `${safeName}_v${entry.storeVersion}.apk`;
     const apkPath = entry.apkPath;
 
-    const tryWriteToDir = async (dirUri: string): Promise<boolean> => {
-      try {
-        const destUri = await SAF.createFileAsync(
-          dirUri,
-          fileName,
-          "application/vnd.android.package-archive",
-        );
-        const content = await FileSystem.readAsStringAsync(apkPath, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        await FileSystem.writeAsStringAsync(destUri, content, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
     // Try previously saved directory first
-    if (downloadDirUri) {
-      const ok = await tryWriteToDir(downloadDirUri);
-      if (ok) return "saved";
+    const currentDir = downloadDirUriRef.current;
+    if (currentDir) {
+      const destUri = await writeApkToSafDir(apkPath, currentDir, fileName);
+      if (destUri) return "saved";
       // Saved URI failed (SAF permission may have expired) — clear it and re-request
       setDownloadDir(null);
     }
 
     // Request fresh directory permission from user
     try {
+      const SAF = FileSystem.StorageAccessFramework;
       const result = await SAF.requestDirectoryPermissionsAsync();
-      if (!result.granted || !result.directoryUri) return "cancelled"; // user dismissed picker
+      if (!result.granted || !result.directoryUri) return "cancelled";
       const newUri = result.directoryUri;
       setDownloadDir(newUri);
-      const ok = await tryWriteToDir(newUri);
-      return ok ? "saved" : "error";
+      const destUri = await writeApkToSafDir(apkPath, newUri, fileName);
+      return destUri ? "saved" : "error";
     } catch {
       return "error";
     }
-  }, [downloadDirUri, setDownloadDir]);
+  }, [writeApkToSafDir, setDownloadDir]);
 
   const updateEntry = useCallback((slug: string, patch: Partial<DownloadEntry>) => {
     setDownloads((prev) => {
@@ -319,34 +345,66 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       const existing = downloadsRef.current.get(slug);
       if (existing && (existing.phase === "downloading" || existing.phase === "resolving")) return;
 
-      // ── WiFi-only enforcement ──────────────────────────────────────────
-      if (Platform.OS !== "web") {
-        const [wifiOnly, connType] = await Promise.all([
-          isWifiOnlyEnabled(),
-          getConnectionType(),
-        ]);
+      // ── Web platform: trigger native browser download ──────────────────
+      if (Platform.OS === "web") {
+        const entry: DownloadEntry = {
+          slug, appName, storeVersion, iconUri, link,
+          phase: "resolving", progress: 0,
+          bytesWritten: 0, bytesTotal: 0, speedBps: 0,
+          startedAt: Date.now(),
+        };
+        setDownloads((prev) => { const n = new Map(prev); n.set(slug, entry); return n; });
 
-        if (wifiOnly && connType === "cellular") {
-          const proceed = await showWifiOnlyAlert();
-          if (!proceed) {
-            logWifiOnlyBlocked(slug, appName);
+        let targetLink = link;
+        if (isMediaFireUrl(link)) {
+          const direct = await resolveMediaFireLink(link);
+          if (direct) {
+            targetLink = direct;
+          } else {
+            updateEntry(slug, { phase: "error", error: "Could not resolve MediaFire link." });
             return;
           }
-          logWifiOnlyBypassed(slug, appName);
         }
+
+        // Trigger browser download via a temporary anchor element
+        try {
+          if (typeof window !== "undefined") {
+            const a = document.createElement("a");
+            a.href = targetLink;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+          updateEntry(slug, { phase: "done", progress: 100, link: targetLink });
+          logDownloadCompleted(slug, appName, storeVersion, 0, 0);
+        } catch {
+          updateEntry(slug, { phase: "error", error: "Could not start download. Try opening the link in your browser." });
+          logDownloadFailed(slug, appName, "web_open_failed");
+        }
+        return;
+      }
+
+      // ── WiFi-only enforcement ──────────────────────────────────────────
+      const [wifiOnly, connType] = await Promise.all([
+        isWifiOnlyEnabled(),
+        getConnectionType(),
+      ]);
+
+      if (wifiOnly && connType === "cellular") {
+        const proceed = await showWifiOnlyAlert();
+        if (!proceed) {
+          logWifiOnlyBlocked(slug, appName);
+          return;
+        }
+        logWifiOnlyBypassed(slug, appName);
       }
 
       const entry: DownloadEntry = {
-        slug,
-        appName,
-        storeVersion,
-        iconUri,
-        link,
-        phase: "idle",
-        progress: 0,
-        bytesWritten: 0,
-        bytesTotal: 0,
-        speedBps: 0,
+        slug, appName, storeVersion, iconUri, link,
+        phase: "idle", progress: 0,
+        bytesWritten: 0, bytesTotal: 0, speedBps: 0,
         startedAt: Date.now(),
       };
 
@@ -466,10 +524,24 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           const durationMs = Date.now() - downloadStartTime;
           const fileSizeMb = (downloadsRef.current.get(slug)?.bytesTotal ?? 0) / 1024 / 1024;
           downloadTrace.stop({ app_slug: slug, success: "true" });
+
+          // ── Auto-save to permanent storage if a folder was already chosen ──
+          let finalApkPath = result.uri;
+          const savedDirUri = downloadDirUriRef.current;
+          if (Platform.OS === "android" && savedDirUri) {
+            const permFileName = `${safeName}_v${storeVersion}.apk`;
+            const permUri = await writeApkToSafDir(result.uri, savedDirUri, permFileName).catch(() => null);
+            if (permUri) {
+              // Move to permanent storage: delete cache copy and use SAF URI
+              await deleteApkFile(result.uri).catch(() => {});
+              finalApkPath = permUri;
+            }
+          }
+
           updateEntry(slug, {
             phase: "done",
             progress: 100,
-            apkPath: result.uri,
+            apkPath: finalApkPath,
           });
 
           getNotifPrefs().then((notifPrefs) => {
@@ -518,7 +590,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         }
       }
     },
-    [updateEntry],
+    [updateEntry, writeApkToSafDir],
   );
 
   const installApk = useCallback(
@@ -531,7 +603,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         try {
           const info = await FileSystem.getInfoAsync(entry.apkPath);
           if (!info.exists) {
-            // File is gone — remove entry so the Download button appears fresh
             setDownloads((prev) => {
               const next = new Map(prev);
               next.delete(slug);
@@ -564,7 +635,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           return;
         }
 
-        // Support both file:// (internal) and content:// (SAF) URIs
         let contentUri: string;
         if (entry.apkPath.startsWith("content://")) {
           contentUri = entry.apkPath;
@@ -581,7 +651,6 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         markInstalled(slug, entry.storeVersion);
         logApkInstalled(slug, entry.appName, entry.storeVersion);
 
-        // Keep the entry as "installed" — APK stays on disk, user can reinstall anytime
         updateEntry(slug, { phase: "installed" });
       } catch {
         updateEntry(slug, {

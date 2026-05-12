@@ -1,5 +1,5 @@
 import { BlurView as _BlurView } from "expo-blur";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View, Text } from "react-native";
@@ -9,7 +9,6 @@ import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { useNotificationInbox } from "@/contexts/NotificationInboxContext";
-import { GlobalDownloadBar } from "@/components/GlobalDownloadBar";
 import { useUpdateNotifications } from "@/hooks/useUpdateNotifications";
 import { useInstalledAppChecker } from "@/hooks/useInstalledAppChecker";
 
@@ -55,15 +54,12 @@ export default function TabLayout() {
   const { newCount, apps } = useFirebaseCatalog();
   const dm = useDownloadManager();
   const { unreadCount, addItem } = useNotificationInbox();
-  const router = useRouter();
   useUpdateNotifications(addItem);
   useInstalledAppChecker(apps);
 
   const activeDownloads = Array.from(dm.downloads.values()).filter(
     (e) => e.phase === "downloading" || e.phase === "resolving",
   ).length;
-
-  const TAB_BAR_HEIGHT = Platform.OS === "web" ? 84 : 56;
 
   return (
     <View style={{ flex: 1 }}>
@@ -168,10 +164,6 @@ export default function TabLayout() {
         />
       </Tabs>
 
-      <GlobalDownloadBar
-        tabBarHeight={TAB_BAR_HEIGHT}
-        onEntryPress={(slug) => router.push(`/app/${slug}`)}
-      />
     </View>
   );
 }
