@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Alert,
   Platform,
@@ -12,10 +12,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { useDownloadManager, type DownloadEntry } from "@/contexts/DownloadManagerContext";
+import { useDownloadManager, type DownloadEntry, SPEED_BOOST_DURATION_MS } from "@/contexts/DownloadManagerContext";
 import { AppIcon } from "@/components/AppIcon";
 import { haptics } from "@/lib/haptics";
 import { logScreenView } from "@/lib/analytics";
+import { showRewarded, isRewardedReady } from "@/lib/unityAds";
 
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "";
@@ -36,7 +37,114 @@ function formatEta(bytesLeft: number, speedBps: number): string {
   return `~${Math.ceil(secs / 60)}m`;
 }
 
-function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () => void }) {
+function formatBoostCountdown(until: number): string {
+  const ms = Math.max(0, until - Date.now());
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  return `${mins}m ${secs}s`;
+}
+
+function SpeedBoostBanner({
+  isSpeedBoosted,
+  speedBoostUntil,
+  onWatchAd,
+  loading,
+}: {
+  isSpeedBoosted: boolean;
+  speedBoostUntil: number | null;
+  onWatchAd: () => void;
+  loading: boolean;
+}) {
+  const colors = useColors();
+  const [countdown, setCountdown] = useState<string>("");
+
+  useEffect(() => {
+    if (!isSpeedBoosted || !speedBoostUntil) return;
+    setCountdown(formatBoostCountdown(speedBoostUntil));
+    const interval = setInterval(() => {
+      const remaining = speedBoostUntil - Date.now();
+      if (remaining <= 0) {
+        clearInterval(interval);
+        setCountdown("0m 0s");
+      } else {
+        setCountdown(formatBoostCountdown(speedBoostUntil));
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isSpeedBoosted, speedBoostUntil]);
+
+  if (isSpeedBoosted && speedBoostUntil) {
+    return (
+      <View style={[boostStyles.activeBanner, { backgroundColor: "rgba(0,230,115,0.07)", borderColor: "rgba(0,230,115,0.3)" }]}>
+        <View style={boostStyles.activeLeft}>
+          <View style={[boostStyles.boostBadge, { backgroundColor: "rgba(0,230,115,0.15)" }]}>
+            <Text style={boostStyles.boostBadgeIcon}>⚡</Text>
+          </View>
+          <View>
+            <Text style={[boostStyles.activeTitle, { color: "#00e673" }]}>Speed Boost Active</Text>
+            <Text style={[boostStyles.activeSub, { color: colors.mutedForeground }]}>
+              Maximum speed · expires in {countdown}
+            </Text>
+          </View>
+        </View>
+        <View style={[boostStyles.activePill, { backgroundColor: "rgba(0,230,115,0.15)", borderColor: "rgba(0,230,115,0.3)" }]}>
+          <Text style={[boostStyles.activePillText, { color: "#00e673" }]}>BOOSTED</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (Platform.OS === "web") return null;
+
+  return (
+    <Pressable
+      onPress={onWatchAd}
+      disabled={loading}
+      style={({ pressed }) => [
+        boostStyles.watchBanner,
+        {
+          backgroundColor: colors.card,
+          borderColor: "rgba(251,191,36,0.4)",
+          opacity: pressed ? 0.85 : loading ? 0.6 : 1,
+        },
+      ]}
+    >
+      <View style={boostStyles.watchLeft}>
+        <View style={[boostStyles.boostBadge, { backgroundColor: "rgba(251,191,36,0.12)" }]}>
+          <Text style={boostStyles.boostBadgeIcon}>⚡</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[boostStyles.watchTitle, { color: colors.foreground }]}>
+            Speed Boost
+          </Text>
+          <Text style={[boostStyles.watchSub, { color: colors.mutedForeground }]}>
+            Watch a short ad · unlock 30 min of max speed
+          </Text>
+        </View>
+      </View>
+      <View style={[boostStyles.watchBtn, { backgroundColor: "#fbbf24" }]}>
+        {loading ? (
+          <Text style={boostStyles.watchBtnText}>Loading…</Text>
+        ) : (
+          <>
+            <Ionicons name="play-circle" size={13} color="#0a0a0a" />
+            <Text style={boostStyles.watchBtnText}>Watch Ad</Text>
+          </>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+function DownloadCard({
+  entry,
+  isSpeedBoosted,
+  onPress,
+}: {
+  entry: DownloadEntry;
+  isSpeedBoosted: boolean;
+  onPress: () => void;
+}) {
   const colors = useColors();
   const dm = useDownloadManager();
   const [saving, setSaving] = useState(false);
@@ -49,6 +157,7 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
   const isFinished = isDone || isInstalled;
 
   const bytesLeft = entry.bytesTotal > 0 ? entry.bytesTotal - entry.bytesWritten : 0;
+  const boostedAndActive = isActive && isSpeedBoosted;
 
   const phaseColor = isInstalled
     ? "#22d3ee"
@@ -58,6 +167,8 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
     ? "#ef4444"
     : isInstalling
     ? "#fbbf24"
+    : boostedAndActive
+    ? "#00e673"
     : colors.accent;
 
   const phaseLabel = isInstalled
@@ -85,7 +196,9 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
       ? "hardware-chip-outline"
       : "download";
 
-  const cardBorderColor = isInstalled
+  const cardBorderColor = boostedAndActive
+    ? "rgba(0,230,115,0.45)"
+    : isInstalled
     ? "rgba(34,211,238,0.25)"
     : isActive
     ? "rgba(0,230,115,0.3)"
@@ -105,7 +218,6 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
     } else if (result === "error") {
       Alert.alert("Save Failed", "Could not write the APK to the selected folder. Try picking a different folder, or check storage permissions.");
     }
-    // "cancelled" = user dismissed folder picker — no alert needed
   };
 
   return (
@@ -123,15 +235,22 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
       <View style={styles.cardRow}>
         <AppIcon uri={entry.iconUri} slug={entry.slug} size={46} borderRadius={12} iconSize={22} />
         <View style={{ flex: 1, gap: 3 }}>
-          <Text style={[styles.appName, { color: colors.foreground }]} numberOfLines={1}>
-            {entry.appName}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={[styles.appName, { color: colors.foreground }]} numberOfLines={1}>
+              {entry.appName}
+            </Text>
+            {boostedAndActive && (
+              <View style={styles.boostChip}>
+                <Text style={styles.boostChipText}>⚡ BOOSTED</Text>
+              </View>
+            )}
+          </View>
           <Text style={[styles.version, { color: colors.mutedForeground }]}>v{entry.storeVersion}</Text>
           <View style={styles.phaseRow}>
             <Ionicons name={phaseIcon} size={12} color={phaseColor} />
             <Text style={[styles.phaseLabel, { color: phaseColor }]}>{phaseLabel}</Text>
             {isActive && entry.speedBps > 0 && (
-              <Text style={[styles.speed, { color: colors.mutedForeground }]}>
+              <Text style={[styles.speed, { color: boostedAndActive ? "#00e673" : colors.mutedForeground }]}>
                 · {formatSpeed(entry.speedBps)}
                 {bytesLeft > 0 && entry.speedBps > 0 ? ` · ${formatEta(bytesLeft, entry.speedBps)}` : ""}
               </Text>
@@ -139,7 +258,6 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
           </View>
         </View>
 
-        {/* Action buttons */}
         <View style={styles.actions}>
           {isActive && (
             <Pressable
@@ -160,7 +278,6 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
             </Pressable>
           )}
 
-          {/* Save to Downloads button (Android only, for done/installed with file:// apkPath) */}
           {Platform.OS === "android" && isFinished && entry.apkPath && !entry.apkPath.startsWith("content://") && (
             <Pressable
               onPress={handleSaveToDownloads}
@@ -172,7 +289,6 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
             </Pressable>
           )}
 
-          {/* Clear/delete button — for done, error, installed */}
           {(isFinished || isError) && (
             <Pressable
               onPress={() => { haptics.selection(); dm.clearEntry(entry.slug); }}
@@ -183,7 +299,6 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
             </Pressable>
           )}
 
-          {/* Install / Reinstall button */}
           {Platform.OS === "android" && isDone && entry.apkPath && (
             <Pressable
               onPress={() => { haptics.medium(); dm.installApk(entry.slug); }}
@@ -209,16 +324,23 @@ function DownloadCard({ entry, onPress }: { entry: DownloadEntry; onPress: () =>
 
       {/* Progress bar */}
       {isActive && (
-        <View style={[styles.progressTrack, { backgroundColor: "rgba(0,230,115,0.1)" }]}>
+        <View style={[styles.progressTrack, { backgroundColor: boostedAndActive ? "rgba(0,230,115,0.15)" : "rgba(0,230,115,0.1)" }]}>
           <View
             style={[
               styles.progressFill,
               {
-                backgroundColor: entry.phase === "resolving" ? colors.accent : colors.primary,
+                backgroundColor: entry.phase === "resolving"
+                  ? colors.accent
+                  : boostedAndActive
+                  ? "#00e673"
+                  : colors.primary,
                 width: entry.phase === "resolving" ? "30%" : `${entry.progress}%`,
               },
             ]}
           />
+          {boostedAndActive && entry.phase === "downloading" && (
+            <View style={styles.progressShimmer} />
+          )}
         </View>
       )}
 
@@ -255,6 +377,7 @@ export default function DownloadsScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const dm = useDownloadManager();
+  const [adLoading, setAdLoading] = useState(false);
 
   React.useEffect(() => { logScreenView("downloads"); }, []);
 
@@ -266,6 +389,48 @@ export default function DownloadsScreen() {
   const hasCompletedOrInstalled = ready.length > 0 || failed.length > 0 || installed.length > 0;
 
   const goToApp = (slug: string) => router.push(`/app/${slug}`);
+
+  const handleWatchAd = useCallback(async () => {
+    if (Platform.OS === "web") return;
+    setAdLoading(true);
+    haptics.medium();
+
+    try {
+      const ready = await isRewardedReady();
+      if (!ready) {
+        haptics.notification("error");
+        Alert.alert(
+          "Ad Not Ready",
+          "The ad is still loading. Please wait a moment and try again.",
+          [{ text: "OK" }],
+        );
+        setAdLoading(false);
+        return;
+      }
+
+      const result = await showRewarded();
+      if (result === "COMPLETED") {
+        dm.activateSpeedBoost(SPEED_BOOST_DURATION_MS);
+        haptics.notification("success");
+        Alert.alert(
+          "⚡ Speed Boost Activated!",
+          "You've unlocked maximum download speed for the next 30 minutes. Enjoy!",
+          [{ text: "Let's Go!" }],
+        );
+      } else if (result === "SKIPPED") {
+        haptics.light();
+        Alert.alert(
+          "Ad Skipped",
+          "Watch the full ad to unlock the speed boost.",
+          [{ text: "OK" }],
+        );
+      }
+    } catch {
+      Alert.alert("Something went wrong", "Could not load the ad. Try again later.");
+    }
+
+    setAdLoading(false);
+  }, [dm]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -297,21 +462,32 @@ export default function DownloadsScreen() {
       </View>
 
       {allEntries.length === 0 ? (
-        <View style={styles.emptyState}>
-          <View style={[styles.emptyIconWrap, { backgroundColor: "rgba(0,230,115,0.07)", borderColor: "rgba(0,230,115,0.2)" }]}>
-            <Ionicons name="download-outline" size={40} color="rgba(0,230,115,0.4)" />
+        <View style={styles.emptyOuter}>
+          {/* Speed boost banner even on empty state */}
+          <View style={styles.emptyBoostWrap}>
+            <SpeedBoostBanner
+              isSpeedBoosted={dm.isSpeedBoosted}
+              speedBoostUntil={dm.speedBoostUntil}
+              onWatchAd={handleWatchAd}
+              loading={adLoading}
+            />
           </View>
-          <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No downloads yet</Text>
-          <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
-            Open any app and tap the download button to get started.
-          </Text>
-          <Pressable
-            onPress={() => router.push("/")}
-            style={({ pressed }) => [styles.browseBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
-          >
-            <Ionicons name="apps-outline" size={16} color={colors.primaryForeground} />
-            <Text style={[styles.browseBtnText, { color: colors.primaryForeground }]}>Browse Apps</Text>
-          </Pressable>
+          <View style={styles.emptyState}>
+            <View style={[styles.emptyIconWrap, { backgroundColor: "rgba(0,230,115,0.07)", borderColor: "rgba(0,230,115,0.2)" }]}>
+              <Ionicons name="download-outline" size={40} color="rgba(0,230,115,0.4)" />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No downloads yet</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+              Open any app and tap the download button to get started.
+            </Text>
+            <Pressable
+              onPress={() => router.push("/")}
+              style={({ pressed }) => [styles.browseBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+            >
+              <Ionicons name="apps-outline" size={16} color={colors.primaryForeground} />
+              <Text style={[styles.browseBtnText, { color: colors.primaryForeground }]}>Browse Apps</Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <ScrollView
@@ -321,16 +497,29 @@ export default function DownloadsScreen() {
             { paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100 },
           ]}
         >
+          {/* Speed Boost Banner */}
+          <SpeedBoostBanner
+            isSpeedBoosted={dm.isSpeedBoosted}
+            speedBoostUntil={dm.speedBoostUntil}
+            onWatchAd={handleWatchAd}
+            loading={adLoading}
+          />
+
           {/* Active */}
           {active.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <View style={[styles.sectionDot, { backgroundColor: colors.primary }]} />
+                <View style={[styles.sectionDot, { backgroundColor: dm.isSpeedBoosted ? "#00e673" : colors.primary }]} />
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Active</Text>
                 <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>{active.length}</Text>
+                {dm.isSpeedBoosted && (
+                  <View style={[styles.sectionBoostTag, { backgroundColor: "rgba(0,230,115,0.1)", borderColor: "rgba(0,230,115,0.25)" }]}>
+                    <Text style={[styles.sectionBoostTagText, { color: "#00e673" }]}>⚡ MAX SPEED</Text>
+                  </View>
+                )}
               </View>
               {active.map((e) => (
-                <DownloadCard key={e.slug} entry={e} onPress={() => goToApp(e.slug)} />
+                <DownloadCard key={e.slug} entry={e} isSpeedBoosted={dm.isSpeedBoosted} onPress={() => goToApp(e.slug)} />
               ))}
             </View>
           )}
@@ -344,12 +533,12 @@ export default function DownloadsScreen() {
                 <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>{ready.length}</Text>
               </View>
               {ready.map((e) => (
-                <DownloadCard key={e.slug} entry={e} onPress={() => goToApp(e.slug)} />
+                <DownloadCard key={e.slug} entry={e} isSpeedBoosted={false} onPress={() => goToApp(e.slug)} />
               ))}
             </View>
           )}
 
-          {/* Installed — always visible until user deletes */}
+          {/* Installed */}
           {installed.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -358,7 +547,7 @@ export default function DownloadsScreen() {
                 <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>{installed.length}</Text>
               </View>
               {installed.map((e) => (
-                <DownloadCard key={e.slug} entry={e} onPress={() => goToApp(e.slug)} />
+                <DownloadCard key={e.slug} entry={e} isSpeedBoosted={false} onPress={() => goToApp(e.slug)} />
               ))}
             </View>
           )}
@@ -372,7 +561,7 @@ export default function DownloadsScreen() {
                 <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>{failed.length}</Text>
               </View>
               {failed.map((e) => (
-                <DownloadCard key={e.slug} entry={e} onPress={() => goToApp(e.slug)} />
+                <DownloadCard key={e.slug} entry={e} isSpeedBoosted={false} onPress={() => goToApp(e.slug)} />
               ))}
             </View>
           )}
@@ -381,6 +570,57 @@ export default function DownloadsScreen() {
     </View>
   );
 }
+
+const boostStyles = StyleSheet.create({
+  activeBanner: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  activeLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  boostBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  boostBadgeIcon: { fontSize: 18 },
+  activeTitle: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  activeSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  activePill: {
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  activePillText: { fontSize: 10, fontWeight: "800", fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
+  watchBanner: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  watchLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  watchTitle: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  watchSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  watchBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  watchBtnText: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold", color: "#0a0a0a" },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -411,6 +651,13 @@ const styles = StyleSheet.create({
   sectionDot: { width: 6, height: 6, borderRadius: 3 },
   sectionTitle: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold", flex: 1 },
   sectionCount: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  sectionBoostTag: {
+    borderRadius: 5,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  sectionBoostTagText: { fontSize: 9, fontWeight: "800", fontFamily: "Inter_700Bold", letterSpacing: 0.5 },
   card: {
     borderRadius: 16,
     borderWidth: 1,
@@ -418,7 +665,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cardRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  appName: { fontSize: 14, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  appName: { fontSize: 14, fontWeight: "700", fontFamily: "Inter_700Bold", flexShrink: 1 },
+  boostChip: {
+    backgroundColor: "rgba(0,230,115,0.15)",
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  boostChipText: { fontSize: 9, fontWeight: "800", fontFamily: "Inter_700Bold", color: "#00e673", letterSpacing: 0.3 },
   version: { fontSize: 11, fontFamily: "Inter_400Regular" },
   phaseRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   phaseLabel: { fontSize: 12, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
@@ -443,6 +698,15 @@ const styles = StyleSheet.create({
   installBtnText: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold" },
   progressTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 3 },
+  progressShimmer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 3,
+  },
   sizeMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
   installedBadge: {
     flexDirection: "row",
@@ -455,6 +719,8 @@ const styles = StyleSheet.create({
   },
   installedBadgeText: { fontSize: 11, fontFamily: "Inter_400Regular", flex: 1 },
   errorText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
+  emptyOuter: { flex: 1 },
+  emptyBoostWrap: { paddingHorizontal: 16, paddingTop: 16 },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 },
   emptyIconWrap: {
     width: 88,

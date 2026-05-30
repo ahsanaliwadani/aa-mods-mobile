@@ -2,7 +2,7 @@
   "expo": {
     "name": "AA Mods",
     "slug": "aa-mods-mobile",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "aa-mods",
@@ -36,6 +36,7 @@
     },
     "android": {
       "package": "com.aa.mods",
+      "versionCode": 2,
       "backgroundColor": "#050816",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {

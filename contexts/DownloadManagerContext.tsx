@@ -49,6 +49,9 @@ const INSTALLED_APPS_KEY = "@aa_mods_installed_apps_v1";
 const DOWNLOADS_KEY = "@aa_mods_downloads_v1";
 const DOWNLOAD_DIR_KEY = "@aa_mods_download_dir_v1";
 const FOLDER_PROMPTED_KEY = "@aa_mods_folder_prompted_v1";
+const SPEED_BOOST_KEY = "@aa_mods_speed_boost_until_v1";
+
+export const SPEED_BOOST_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
 export type DownloadPhase =
   | "idle"
@@ -83,6 +86,9 @@ export type InstalledApp = {
 type DownloadManagerContextType = {
   downloads: Map<string, DownloadEntry>;
   isRestoreComplete: boolean;
+  speedBoostUntil: number | null;
+  isSpeedBoosted: boolean;
+  activateSpeedBoost: (durationMs?: number) => void;
   startDownload: (
     slug: string,
     appName: string,
@@ -140,6 +146,15 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   const [installedApps, setInstalledApps] = useState<Record<string, InstalledApp>>({});
   const [downloadDirUri, setDownloadDirUriState] = useState<string | null>(null);
   const [isRestoreComplete, setIsRestoreComplete] = useState(false);
+  const [speedBoostUntil, setSpeedBoostUntil] = useState<number | null>(null);
+
+  const isSpeedBoosted = speedBoostUntil !== null && Date.now() < speedBoostUntil;
+
+  const activateSpeedBoost = useCallback((durationMs: number = SPEED_BOOST_DURATION_MS) => {
+    const until = Date.now() + durationMs;
+    setSpeedBoostUntil(until);
+    AsyncStorage.setItem(SPEED_BOOST_KEY, String(until)).catch(() => {});
+  }, []);
 
   const resumableRefs = useRef<Map<string, _DownloadResumable>>(new Map());
   const speedTracker = useRef<Map<string, { lastBytes: number; lastTime: number }>>(new Map());
@@ -213,8 +228,21 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       })
       .catch(() => {});
 
-    // Mark restore complete after all three loads settle (success or failure)
-    Promise.allSettled([loadInstalled, loadDownloads, loadDir]).then(() => {
+    const loadBoost = AsyncStorage.getItem(SPEED_BOOST_KEY)
+      .then((val) => {
+        if (val) {
+          const until = Number(val);
+          if (until > Date.now()) {
+            setSpeedBoostUntil(until);
+          } else {
+            AsyncStorage.removeItem(SPEED_BOOST_KEY).catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
+
+    // Mark restore complete after all loads settle (success or failure)
+    Promise.allSettled([loadInstalled, loadDownloads, loadDir, loadBoost]).then(() => {
       setIsRestoreComplete(true);
     });
   }, []);
@@ -813,6 +841,9 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       value={{
         downloads,
         isRestoreComplete,
+        speedBoostUntil,
+        isSpeedBoosted,
+        activateSpeedBoost,
         startDownload,
         installApk,
         cancelDownload,
