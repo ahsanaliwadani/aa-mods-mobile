@@ -1,0 +1,6 @@
+{
+  "name": "unity-ads",
+  "version": "1.0.0",
+  "description": "Local Unity Ads native module for AA Mods",
+  "main": "index"
+}

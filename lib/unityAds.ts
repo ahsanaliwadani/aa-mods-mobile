@@ -24,7 +24,7 @@ type RewardedResult = "SKIPPED" | "COMPLETED" | "ERROR" | null;
 function getRNUnityAds() {
   if (Platform.OS === "web") return null;
   try {
-    return require("react-native-unity-ads").default;
+    return require("unity-ads").default;
   } catch {
     return null;
   }
