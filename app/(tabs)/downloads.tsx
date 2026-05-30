@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Platform,
@@ -12,12 +12,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { useDownloadManager, type DownloadEntry, SPEED_BOOST_DURATION_MS } from "@/contexts/DownloadManagerContext";
+import { useDownloadManager, type DownloadEntry } from "@/contexts/DownloadManagerContext";
 import { AppIcon } from "@/components/AppIcon";
 import { haptics } from "@/lib/haptics";
 import { logScreenView } from "@/lib/analytics";
-import { showRewarded, isRewardedReady } from "@/lib/unityAds";
-
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "";
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -42,98 +40,6 @@ function formatBoostCountdown(until: number): string {
   const mins = Math.floor(ms / 60000);
   const secs = Math.floor((ms % 60000) / 1000);
   return `${mins}m ${secs}s`;
-}
-
-function SpeedBoostBanner({
-  isSpeedBoosted,
-  speedBoostUntil,
-  onWatchAd,
-  loading,
-}: {
-  isSpeedBoosted: boolean;
-  speedBoostUntil: number | null;
-  onWatchAd: () => void;
-  loading: boolean;
-}) {
-  const colors = useColors();
-  const [countdown, setCountdown] = useState<string>("");
-
-  useEffect(() => {
-    if (!isSpeedBoosted || !speedBoostUntil) return;
-    setCountdown(formatBoostCountdown(speedBoostUntil));
-    const interval = setInterval(() => {
-      const remaining = speedBoostUntil - Date.now();
-      if (remaining <= 0) {
-        clearInterval(interval);
-        setCountdown("0m 0s");
-      } else {
-        setCountdown(formatBoostCountdown(speedBoostUntil));
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isSpeedBoosted, speedBoostUntil]);
-
-  if (isSpeedBoosted && speedBoostUntil) {
-    return (
-      <View style={[boostStyles.activeBanner, { backgroundColor: "rgba(0,230,115,0.07)", borderColor: "rgba(0,230,115,0.3)" }]}>
-        <View style={boostStyles.activeLeft}>
-          <View style={[boostStyles.boostBadge, { backgroundColor: "rgba(0,230,115,0.15)" }]}>
-            <Text style={boostStyles.boostBadgeIcon}>⚡</Text>
-          </View>
-          <View>
-            <Text style={[boostStyles.activeTitle, { color: "#00e673" }]}>Speed Boost Active</Text>
-            <Text style={[boostStyles.activeSub, { color: colors.mutedForeground }]}>
-              Maximum speed · expires in {countdown}
-            </Text>
-          </View>
-        </View>
-        <View style={[boostStyles.activePill, { backgroundColor: "rgba(0,230,115,0.15)", borderColor: "rgba(0,230,115,0.3)" }]}>
-          <Text style={[boostStyles.activePillText, { color: "#00e673" }]}>BOOSTED</Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (Platform.OS === "web") return null;
-
-  return (
-    <Pressable
-      onPress={onWatchAd}
-      disabled={loading}
-      style={({ pressed }) => [
-        boostStyles.watchBanner,
-        {
-          backgroundColor: colors.card,
-          borderColor: "rgba(251,191,36,0.4)",
-          opacity: pressed ? 0.85 : loading ? 0.6 : 1,
-        },
-      ]}
-    >
-      <View style={boostStyles.watchLeft}>
-        <View style={[boostStyles.boostBadge, { backgroundColor: "rgba(251,191,36,0.12)" }]}>
-          <Text style={boostStyles.boostBadgeIcon}>⚡</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[boostStyles.watchTitle, { color: colors.foreground }]}>
-            Speed Boost
-          </Text>
-          <Text style={[boostStyles.watchSub, { color: colors.mutedForeground }]}>
-            Watch a short ad · unlock 30 min of max speed
-          </Text>
-        </View>
-      </View>
-      <View style={[boostStyles.watchBtn, { backgroundColor: "#fbbf24" }]}>
-        {loading ? (
-          <Text style={boostStyles.watchBtnText}>Loading…</Text>
-        ) : (
-          <>
-            <Ionicons name="play-circle" size={13} color="#0a0a0a" />
-            <Text style={boostStyles.watchBtnText}>Watch Ad</Text>
-          </>
-        )}
-      </View>
-    </Pressable>
-  );
 }
 
 function DownloadCard({
@@ -377,7 +283,6 @@ export default function DownloadsScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const dm = useDownloadManager();
-  const [adLoading, setAdLoading] = useState(false);
 
   React.useEffect(() => { logScreenView("downloads"); }, []);
 
@@ -389,48 +294,6 @@ export default function DownloadsScreen() {
   const hasCompletedOrInstalled = ready.length > 0 || failed.length > 0 || installed.length > 0;
 
   const goToApp = (slug: string) => router.push(`/app/${slug}`);
-
-  const handleWatchAd = useCallback(async () => {
-    if (Platform.OS === "web") return;
-    setAdLoading(true);
-    haptics.medium();
-
-    try {
-      const ready = await isRewardedReady();
-      if (!ready) {
-        haptics.notification("error");
-        Alert.alert(
-          "Ad Not Ready",
-          "The ad is still loading. Please wait a moment and try again.",
-          [{ text: "OK" }],
-        );
-        setAdLoading(false);
-        return;
-      }
-
-      const result = await showRewarded();
-      if (result === "COMPLETED") {
-        dm.activateSpeedBoost(SPEED_BOOST_DURATION_MS);
-        haptics.notification("success");
-        Alert.alert(
-          "⚡ Speed Boost Activated!",
-          "You've unlocked maximum download speed for the next 30 minutes. Enjoy!",
-          [{ text: "Let's Go!" }],
-        );
-      } else if (result === "SKIPPED") {
-        haptics.light();
-        Alert.alert(
-          "Ad Skipped",
-          "Watch the full ad to unlock the speed boost.",
-          [{ text: "OK" }],
-        );
-      }
-    } catch {
-      Alert.alert("Something went wrong", "Could not load the ad. Try again later.");
-    }
-
-    setAdLoading(false);
-  }, [dm]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -463,15 +326,6 @@ export default function DownloadsScreen() {
 
       {allEntries.length === 0 ? (
         <View style={styles.emptyOuter}>
-          {/* Speed boost banner even on empty state */}
-          <View style={styles.emptyBoostWrap}>
-            <SpeedBoostBanner
-              isSpeedBoosted={dm.isSpeedBoosted}
-              speedBoostUntil={dm.speedBoostUntil}
-              onWatchAd={handleWatchAd}
-              loading={adLoading}
-            />
-          </View>
           <View style={styles.emptyState}>
             <View style={[styles.emptyIconWrap, { backgroundColor: "rgba(0,230,115,0.07)", borderColor: "rgba(0,230,115,0.2)" }]}>
               <Ionicons name="download-outline" size={40} color="rgba(0,230,115,0.4)" />
@@ -497,14 +351,6 @@ export default function DownloadsScreen() {
             { paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100 },
           ]}
         >
-          {/* Speed Boost Banner */}
-          <SpeedBoostBanner
-            isSpeedBoosted={dm.isSpeedBoosted}
-            speedBoostUntil={dm.speedBoostUntil}
-            onWatchAd={handleWatchAd}
-            loading={adLoading}
-          />
-
           {/* Active */}
           {active.length > 0 && (
             <View style={styles.section}>

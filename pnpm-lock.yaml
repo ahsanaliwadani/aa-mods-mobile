@@ -177,17 +177,12 @@ importers:
       typescript:
         specifier: ~5.9.2
         version: 5.9.3
-      unity-ads:
-        specifier: workspace:*
-        version: link:modules/unity-ads
       zod:
         specifier: 'catalog:'
         version: 3.25.76
       zod-validation-error:
         specifier: ^3.4.0
         version: 3.5.4(zod@3.25.76)
-
-  modules/unity-ads: {}
 
 packages:
 

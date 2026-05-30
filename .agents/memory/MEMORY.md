@@ -1,2 +1,1 @@
-- [Unity Ads integration](unity-ads.md) — react-native-unity-ads@1.0.3; web must be guarded; initialized at module level with __DEV__ as testMode flag
 - [pnpm store fix](pnpm-store.md) — store-dir must be pinned to v10 in .npmrc; use system pnpm at /nix/store path with --no-frozen-lockfile when adding packages
