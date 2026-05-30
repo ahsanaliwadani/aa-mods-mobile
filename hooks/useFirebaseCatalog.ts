@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Platform } from "react-native";
 import { ref, onValue, type DataSnapshot } from "firebase/database";
 import { database, FIREBASE_CONFIG } from "@/lib/firebase";
 import { logCatalogSynced, logCatalogError } from "@/lib/analytics";
 import { startTrace } from "@/lib/firebasePerformance";
+import { getNetworkStatus } from "@/lib/networkUtils";
 
 const BASE_ICON_URL = "https://aa-mods.vercel.app";
-const LOAD_TIMEOUT_MS = 3000;
+const LOAD_TIMEOUT_MS = 8000;
 
 type DownloadButton = {
   label: string;
@@ -41,6 +43,8 @@ export type LiveStoreCatalogApp = StoreCatalogApp & {
   whatsNew?: string[];
   packageName?: string;
 };
+
+export type OfflineReason = "airplane" | "no-data" | "no-internet" | null;
 
 function toArray<T>(val: unknown): T[] | undefined {
   if (val == null) return undefined;
@@ -217,11 +221,24 @@ function deriveCategories(apps: LiveStoreCatalogApp[]): string[] {
   }
 }
 
+async function detectOfflineReason(): Promise<OfflineReason> {
+  if (Platform.OS === "web") return null;
+  try {
+    const status = await getNetworkStatus();
+    if (status.isAirplaneMode) return "airplane";
+    if (!status.isConnected) return "no-data";
+    return null;
+  } catch {
+    return "no-internet";
+  }
+}
+
 export function useFirebaseCatalog() {
   const [apps, setApps] = useState<LiveStoreCatalogApp[]>([]);
   const [categories, setCategories] = useState<string[]>(["All"]);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
+  const [offlineReason, setOfflineReason] = useState<OfflineReason>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [fetchTick, setFetchTick] = useState(0);
   const isMounted = useRef(true);
@@ -230,6 +247,7 @@ export function useFirebaseCatalog() {
   const refetch = useCallback(() => {
     setLoading(true);
     setConnected(false);
+    setOfflineReason(null);
     setFetchTick((t) => t + 1);
   }, []);
 
@@ -238,52 +256,103 @@ export function useFirebaseCatalog() {
     catalogTrace.current = startTrace("catalog_load");
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-      if (isMounted.current) {
-        setLoading(false);
-        catalogTrace.current.stop({ source: "timeout" });
-        logCatalogError("load_timeout");
-      }
-    }, LOAD_TIMEOUT_MS);
 
-    const REST_URL = `${FIREBASE_CONFIG.databaseURL}/app_content/apps.json`;
+    // Check real network first (fast — expo-network is synchronous-ish)
+    // If truly offline, show the right message immediately without waiting
+    let networkCheckDone = false;
 
-    fetch(REST_URL, { signal: controller.signal })
-      .then((res) => res.json())
-      .then((data: Record<string, unknown> | null) => {
-        clearTimeout(timeoutId);
-        if (!isMounted.current) return;
+    const doLoad = async () => {
+      // Quick network check before even attempting the fetch
+      if (Platform.OS !== "web") {
         try {
-          const merged = data ? buildCatalog(data) : [];
-          setApps(merged);
-          setCategories(deriveCategories(merged));
-          setConnected(true);
-          setLastUpdated(new Date());
-          catalogTrace.current.stop({
-            app_count: String(merged.length),
-            source: "firebase_rest",
-          });
-          logCatalogSynced(merged.length, 0, "firebase");
-        } catch (parseError) {
-          console.warn("[Firebase] Catalog parse error:", parseError);
-          logCatalogError(
-            parseError instanceof Error ? parseError.message : "parse_error",
-          );
-        } finally {
-          if (isMounted.current) setLoading(false);
+          const status = await getNetworkStatus();
+          if (!status.isConnected) {
+            if (!isMounted.current) return;
+            const reason: OfflineReason = status.isAirplaneMode
+              ? "airplane"
+              : "no-data";
+            setOfflineReason(reason);
+            setConnected(false);
+            setLoading(false);
+            catalogTrace.current.stop({ source: "offline_" + reason });
+            logCatalogError("offline_" + reason);
+            return;
+          }
+        } catch {
+          // ignore — fall through to fetch attempt
         }
-      })
-      .catch((error: Error) => {
-        if (error.name === "AbortError") return; // handled by timeout
-        clearTimeout(timeoutId);
-        if (!isMounted.current) return;
-        console.warn("[Firebase] Catalog load error:", error.message);
-        setConnected(false);
-        setLoading(false);
-        catalogTrace.current.stop({ source: "error" });
-        logCatalogError(error.message);
-      });
+      }
+      networkCheckDone = true;
+
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        if (isMounted.current) {
+          // Double-check network on timeout before giving up
+          detectOfflineReason().then((reason) => {
+            if (!isMounted.current) return;
+            setOfflineReason(reason ?? "no-internet");
+            setLoading(false);
+            catalogTrace.current.stop({ source: "timeout" });
+            logCatalogError("load_timeout");
+          }).catch(() => {
+            if (!isMounted.current) return;
+            setOfflineReason("no-internet");
+            setLoading(false);
+          });
+        }
+      }, LOAD_TIMEOUT_MS);
+
+      const REST_URL = `${FIREBASE_CONFIG.databaseURL}/app_content/apps.json`;
+
+      fetch(REST_URL, { signal: controller.signal })
+        .then((res) => res.json())
+        .then((data: Record<string, unknown> | null) => {
+          clearTimeout(timeoutId);
+          if (!isMounted.current) return;
+          try {
+            const merged = data ? buildCatalog(data) : [];
+            setApps(merged);
+            setCategories(deriveCategories(merged));
+            setConnected(true);
+            setOfflineReason(null);
+            setLastUpdated(new Date());
+            catalogTrace.current.stop({
+              app_count: String(merged.length),
+              source: "firebase_rest",
+            });
+            logCatalogSynced(merged.length, 0, "firebase");
+          } catch (parseError) {
+            console.warn("[Firebase] Catalog parse error:", parseError);
+            logCatalogError(
+              parseError instanceof Error ? parseError.message : "parse_error",
+            );
+          } finally {
+            if (isMounted.current) setLoading(false);
+          }
+        })
+        .catch((error: Error) => {
+          if (error.name === "AbortError") return; // handled by timeout
+          clearTimeout(timeoutId);
+          if (!isMounted.current) return;
+          console.warn("[Firebase] Catalog load error:", error.message);
+          // Check actual network state to give correct offline reason
+          detectOfflineReason().then((reason) => {
+            if (!isMounted.current) return;
+            setOfflineReason(reason ?? "no-internet");
+            setConnected(false);
+            setLoading(false);
+          }).catch(() => {
+            if (!isMounted.current) return;
+            setOfflineReason("no-internet");
+            setConnected(false);
+            setLoading(false);
+          });
+          catalogTrace.current.stop({ source: "error" });
+          logCatalogError(error.message);
+        });
+    };
+
+    doLoad();
 
     // Real-time listener for live updates after initial REST load settles
     let unsubscribe: (() => void) | undefined;
@@ -300,6 +369,7 @@ export function useFirebaseCatalog() {
               setApps(merged);
               setCategories(deriveCategories(merged));
               setConnected(true);
+              setOfflineReason(null);
               setLastUpdated(new Date());
             } catch {}
           },
@@ -310,7 +380,7 @@ export function useFirebaseCatalog() {
 
     return () => {
       isMounted.current = false;
-      clearTimeout(timeoutId);
+      controller.abort();
       clearTimeout(liveTimer);
       try { unsubscribe?.(); } catch {}
     };
@@ -318,5 +388,5 @@ export function useFirebaseCatalog() {
 
   const newCount = apps.filter((a) => a.isNew).length;
 
-  return { apps, categories, loading, connected, lastUpdated, newCount, refetch };
+  return { apps, categories, loading, connected, offlineReason, lastUpdated, newCount, refetch };
 }

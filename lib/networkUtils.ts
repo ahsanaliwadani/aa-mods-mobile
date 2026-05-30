@@ -6,6 +6,13 @@ export type WifiCheckResult =
   | "unknown"
   | "web";
 
+export type NetworkStatus = {
+  isConnected: boolean;
+  isAirplaneMode: boolean;
+  isCellularOff: boolean;
+  type: "wifi" | "cellular" | "none" | "unknown" | "web";
+};
+
 /**
  * Returns the current network connection type.
  * Only meaningful on Android/iOS — returns "web" on web platform.
@@ -28,6 +35,51 @@ export async function getConnectionType(): Promise<WifiCheckResult> {
     return "unknown";
   } catch {
     return "unknown";
+  }
+}
+
+/**
+ * Returns a detailed network status object including airplane mode detection.
+ */
+export async function getNetworkStatus(): Promise<NetworkStatus> {
+  if (Platform.OS === "web") {
+    return { isConnected: true, isAirplaneMode: false, isCellularOff: false, type: "web" };
+  }
+  try {
+    const Network = require("expo-network") as typeof import("expo-network");
+    const state = await Network.getNetworkStateAsync();
+
+    const t = state.type;
+    const isConnected = state.isConnected === true;
+
+    const isNoneType =
+      t === Network.NetworkStateType.NONE ||
+      t === Network.NetworkStateType.UNKNOWN;
+
+    // Airplane mode: type is NONE and no connection at all
+    const isAirplaneMode = isNoneType && !isConnected;
+
+    // Cellular off: type is NONE but not explicitly airplane mode
+    // (network type unknown but not connected — most likely data off)
+    const isCellularOff = !isConnected && !isAirplaneMode;
+
+    let type: NetworkStatus["type"] = "none";
+    if (
+      t === Network.NetworkStateType.WIFI ||
+      t === Network.NetworkStateType.ETHERNET
+    ) {
+      type = "wifi";
+    } else if (t === Network.NetworkStateType.CELLULAR) {
+      type = isConnected ? "cellular" : "none";
+    } else if (isNoneType) {
+      type = "none";
+    } else {
+      type = "unknown";
+    }
+
+    return { isConnected, isAirplaneMode, isCellularOff, type };
+  } catch {
+    return { isConnected: false, isAirplaneMode: false, isCellularOff: false, type: "unknown" };
   }
 }
 

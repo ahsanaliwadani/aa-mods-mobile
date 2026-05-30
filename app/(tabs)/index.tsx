@@ -7,6 +7,7 @@ import React, { useMemo, useState, useEffect, useRef, useCallback } from "react"
 import {
   Animated,
   Dimensions,
+  Easing,
   FlatList,
   Modal,
   Platform,
@@ -24,7 +25,7 @@ import { haptics } from "@/lib/haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-import { useFirebaseCatalog, type LiveStoreCatalogApp } from "@/hooks/useFirebaseCatalog";
+import { useFirebaseCatalog, type LiveStoreCatalogApp, type OfflineReason } from "@/hooks/useFirebaseCatalog";
 import { useInstalledAppUpdates } from "@/hooks/useInstalledAppUpdates";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useUserData } from "@/contexts/UserDataContext";
@@ -333,6 +334,177 @@ const AppCard = React.memo(function AppCard({
   );
 });
 
+function LoadingSpinner({ size = 48, color = "#00e673" }: { size?: number; color?: string }) {
+  const spinAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: Platform.OS !== "web",
+      }),
+    ).start();
+  }, [spinAnim]);
+  const rotate = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] });
+  return (
+    <Animated.View style={{ transform: [{ rotate }], width: size, height: size }}>
+      <View style={{
+        width: size, height: size, borderRadius: size / 2,
+        borderWidth: 3, borderColor: "transparent",
+        borderTopColor: color, borderRightColor: color + "44",
+      }} />
+    </Animated.View>
+  );
+}
+
+function LoadingDots({ color }: { color: string }) {
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dot3 = useRef(new Animated.Value(0.3)).current;
+  useEffect(() => {
+    const anim = (val: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(val, { toValue: 1, duration: 300, useNativeDriver: Platform.OS !== "web" }),
+          Animated.timing(val, { toValue: 0.3, duration: 300, useNativeDriver: Platform.OS !== "web" }),
+          Animated.delay(600 - delay),
+        ]),
+      );
+    Animated.parallel([anim(dot1, 0), anim(dot2, 200), anim(dot3, 400)]).start();
+  }, [dot1, dot2, dot3]);
+  return (
+    <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+      {[dot1, dot2, dot3].map((d, i) => (
+        <Animated.View key={i} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: color, opacity: d }} />
+      ))}
+    </View>
+  );
+}
+
+function LoadingScreen({ topInset, colors }: { topInset: number; colors: ReturnType<typeof useColors> }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: Platform.OS !== "web" }).start();
+  }, [fadeAnim]);
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <View style={styles.headerTop}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Image source={require("@/assets/images/icon.png")} style={{ width: 36, height: 36, borderRadius: 10 }} contentFit="cover" cachePolicy="memory-disk" />
+            <View>
+              <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
+              <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+          {[1, 2, 3, 4, 5].map((i) => <SkeletonAppCard key={i} />)}
+        </View>
+      </Animated.View>
+      <View style={[loadingBannerStyles.wrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <LoadingSpinner size={18} color={colors.primary} />
+        <Text style={[loadingBannerStyles.text, { color: colors.mutedForeground }]}>Loading apps</Text>
+        <LoadingDots color={colors.primary} />
+      </View>
+    </View>
+  );
+}
+
+function OfflineScreen({
+  topInset, colors, reason, onRetry,
+}: {
+  topInset: number;
+  colors: ReturnType<typeof useColors>;
+  reason: OfflineReason;
+  onRetry: () => void;
+}) {
+  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+  useEffect(() => {
+    Animated.spring(scaleAnim, { toValue: 1, tension: 80, friction: 8, useNativeDriver: Platform.OS !== "web" }).start();
+  }, [scaleAnim]);
+
+  const isAirplane = reason === "airplane";
+  const isNoData = reason === "no-data";
+
+  const icon = isAirplane ? "airplane" : isNoData ? "cellular-outline" : "wifi-outline";
+  const iconColor = isAirplane ? "#f59e0b" : isNoData ? "#3b82f6" : "#ef4444";
+  const iconBg = isAirplane ? "rgba(245,158,11,0.08)" : isNoData ? "rgba(59,130,246,0.08)" : "rgba(239,68,68,0.08)";
+  const iconBorder = isAirplane ? "rgba(245,158,11,0.2)" : isNoData ? "rgba(59,130,246,0.2)" : "rgba(239,68,68,0.2)";
+
+  const title = isAirplane
+    ? "Airplane Mode is On"
+    : isNoData
+    ? "Mobile Data is Off"
+    : "No Internet Connection";
+
+  const subtitle = isAirplane
+    ? "Turn off Airplane Mode to connect to the internet and load apps."
+    : isNoData
+    ? "Turn on your mobile data or connect to Wi-Fi to load apps."
+    : "Could not load apps. Please check your internet connection and try again.";
+
+  const actionLabel = isAirplane
+    ? "Turn Off Airplane Mode"
+    : isNoData
+    ? "Turn On Mobile Data"
+    : null;
+
+  const handleAction = () => {
+    haptics.medium();
+    if (Platform.OS === "android") {
+      if (isAirplane || isNoData) {
+        Linking.openSettings();
+      }
+    } else if (Platform.OS === "ios") {
+      Linking.openURL("App-Prefs:root=AIRPLANE_MODE");
+    }
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <View style={styles.headerTop}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Image source={require("@/assets/images/icon.png")} style={{ width: 36, height: 36, borderRadius: 10 }} contentFit="cover" cachePolicy="memory-disk" />
+            <View>
+              <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
+              <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+      <Animated.View style={[offlineStyles.container, { transform: [{ scale: scaleAnim }] }]}>
+        <View style={[offlineStyles.iconWrap, { backgroundColor: iconBg, borderColor: iconBorder }]}>
+          <Ionicons name={icon as "wifi-outline"} size={48} color={iconColor} style={{ opacity: 0.85 }} />
+        </View>
+        <Text style={[offlineStyles.title, { color: colors.foreground }]}>{title}</Text>
+        <Text style={[offlineStyles.subtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>
+        {actionLabel && (
+          <Pressable
+            onPress={handleAction}
+            style={({ pressed }) => [offlineStyles.actionBtn, { backgroundColor: iconColor + "18", borderColor: iconColor + "44", opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Ionicons name={isAirplane ? "airplane-outline" : "wifi-outline"} size={16} color={iconColor} />
+            <Text style={[offlineStyles.actionBtnText, { color: iconColor }]}>{actionLabel}</Text>
+          </Pressable>
+        )}
+        <Pressable
+          onPress={onRetry}
+          style={({ pressed }) => [offlineStyles.retryBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
+        >
+          <Ionicons name="refresh" size={16} color={colors.primaryForeground} />
+          <Text style={[offlineStyles.retryBtnText, { color: colors.primaryForeground }]}>Try Again</Text>
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
+}
+
 const SORT_OPTIONS: { key: SortKey; label: string; icon: string }[] = [
   { key: "newest", label: "Newest", icon: "time-outline" },
   { key: "az", label: "A–Z", icon: "text-outline" },
@@ -358,7 +530,7 @@ export default function HomeScreen() {
   const [sortKey, setSortKey] = useState<SortKey>("newest");
   const [quickActionApp, setQuickActionApp] = useState<LiveStoreCatalogApp | null>(null);
 
-  const { apps, categories, loading, connected, lastUpdated, refetch } = useFirebaseCatalog();
+  const { apps, categories, loading, connected, offlineReason, lastUpdated, refetch } = useFirebaseCatalog();
   const { addItem: addInboxItem, unreadCount: inboxUnread } = useNotificationInbox();
   const { appsWithUpdates } = useInstalledAppUpdates(apps, addInboxItem);
   const { config } = useRemoteConfig();
@@ -455,75 +627,18 @@ export default function HomeScreen() {
 
   if (loading && apps.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-          <View style={styles.headerTop}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <Image
-                source={require("@/assets/images/icon.png")}
-                style={{ width: 36, height: 36, borderRadius: 10 }}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-              />
-              <View>
-                <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
-                <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
-          {[1, 2, 3, 4, 5].map((i) => <SkeletonAppCard key={i} />)}
-        </View>
-        <View style={[loadingStyles.banner, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={loadingStyles.dot} />
-          <Text style={[loadingStyles.text, { color: colors.mutedForeground }]}>
-            Loading apps from database…
-          </Text>
-        </View>
-      </View>
+      <LoadingScreen topInset={topInset} colors={colors} />
     );
   }
 
   if (!loading && !connected && apps.length === 0) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-          <View style={styles.headerTop}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <Image
-                source={require("@/assets/images/icon.png")}
-                style={{ width: 36, height: 36, borderRadius: 10 }}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-              />
-              <View>
-                <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
-                <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        <View style={offlineStyles.container}>
-          <View style={[offlineStyles.iconWrap, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.2)" }]}>
-            <Ionicons name="wifi-outline" size={48} color="#ef4444" style={{ opacity: 0.7 }} />
-          </View>
-          <Text style={[offlineStyles.title, { color: colors.foreground }]}>No Internet Connection</Text>
-          <Text style={[offlineStyles.subtitle, { color: colors.mutedForeground }]}>
-            Could not load apps. Please check your internet connection or mobile data and try again.
-          </Text>
-          <Pressable
-            onPress={() => { haptics.medium(); refetch(); }}
-            style={({ pressed }) => [offlineStyles.retryBtn, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
-          >
-            <Ionicons name="refresh" size={16} color={colors.primaryForeground} />
-            <Text style={[offlineStyles.retryBtnText, { color: colors.primaryForeground }]}>Try Again</Text>
-          </Pressable>
-          <Text style={[offlineStyles.hint, { color: colors.mutedForeground }]}>
-            Make sure Wi-Fi or mobile data is turned on
-          </Text>
-        </View>
-      </View>
+      <OfflineScreen
+        topInset={topInset}
+        colors={colors}
+        reason={offlineReason}
+        onRetry={() => { haptics.medium(); refetch(); }}
+      />
     );
   }
 
@@ -769,29 +884,25 @@ const styles = StyleSheet.create({
   bellBadgeText: { color: "#04131b", fontSize: 8, fontWeight: "800", fontFamily: "Inter_700Bold" },
 });
 
-const loadingStyles = StyleSheet.create({
-  banner: {
+const loadingBannerStyles = StyleSheet.create({
+  wrap: {
     position: "absolute",
     bottom: 100,
     left: 24,
     right: 24,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 10,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#00e673",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
   },
   text: {
     fontSize: 13,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_600SemiBold",
+    flex: 1,
   },
 });
 
@@ -839,10 +950,19 @@ const offlineStyles = StyleSheet.create({
     fontWeight: "700",
     fontFamily: "Inter_700Bold",
   },
-  hint: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    opacity: 0.6,
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    marginTop: 2,
+  },
+  actionBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    fontFamily: "Inter_700Bold",
   },
 });
