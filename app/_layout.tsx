@@ -32,6 +32,7 @@ import { ensureAnonymousAuth } from "@/lib/firebase";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { initializeOneSignal, setInboxCallback } from "@/lib/oneSignal";
+import { initializeUnityAds, showInterstitial } from "@/lib/unityAds";
 
 const GestureHandlerRootView = _GestureHandlerRootView as unknown as React.ComponentType<{
   style?: object;
@@ -43,6 +44,7 @@ const isExpoGo = Constants.appOwnership === "expo";
 SplashScreen.preventAutoHideAsync();
 
 initializeOneSignal();
+initializeUnityAds(__DEV__);
 
 if (Platform.OS !== "web") {
   try {
@@ -110,6 +112,7 @@ function RootLayoutNav() {
       } else if (entry.phase === "done" && prev && prev !== "done") {
         addItem({ title: "Download Complete ✓", body: `${entry.appName} is ready to install!`, type: "download_done", data: { slug, appName: entry.appName } });
         recordDownload();
+        showInterstitial().catch(() => {});
       } else if (entry.phase === "error" && prev && prev !== "error") {
         addItem({ title: "Download Failed", body: `${entry.appName}: ${(entry.error ?? "Unknown error").slice(0, 100)}`, type: "download_error", data: { slug, appName: entry.appName } });
       }

@@ -65,6 +65,13 @@
           "origin": "https://aa-mods.vercel.app"
         }
       ],
+      [
+        "./plugins/withUnityAds",
+        {
+          "gameIdAndroid": "6125972",
+          "gameIdIOS": "6125973"
+        }
+      ],
       "expo-font",
       "expo-web-browser",
       [

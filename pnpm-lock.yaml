@@ -32,6 +32,9 @@ importers:
       react-native-onesignal:
         specifier: ^5.4.5
         version: 5.4.5(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))
+      react-native-unity-ads:
+        specifier: ^1.0.3
+        version: 1.0.3
     devDependencies:
       '@babel/core':
         specifier: ^7.25.2
@@ -3469,6 +3472,9 @@ packages:
     peerDependencies:
       react: '*'
       react-native: '*'
+
+  react-native-unity-ads@1.0.3:
+    resolution: {integrity: sha512-9zGQDz9+lAIrwBYKDqiywFHz1EMMTwqE/bv1CbzAYMJ+3aBFBHXDiNj02wYmZatcSNEhJA3S1kOT6iWeoVhzzg==}
 
   react-native-web@0.21.2:
     resolution: {integrity: sha512-SO2t9/17zM4iEnFvlu2DA9jqNbzNhoUP+AItkoCOyFmDMOhUnBBznBDCYN92fGdfAkfQlWzPoez6+zLxFNsZEg==}
@@ -8171,6 +8177,8 @@ snapshots:
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
       warn-once: 0.1.1
+
+  react-native-unity-ads@1.0.3: {}
 
   react-native-web@0.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
     dependencies:
