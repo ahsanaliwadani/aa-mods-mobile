@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { AppIcon } from "@/components/AppIcon";
 import { DownloadSheet, useDownloadSheet } from "@/components/DownloadSheet";
+import { UnityBannerSlot } from "@/components/UnityBannerSlot";
 import { haptics } from "@/lib/haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -677,6 +678,8 @@ export default function AppDetailScreen() {
           </SectionBlock>
         )}
       </ScrollView>
+
+      <UnityBannerSlot />
 
       <DownloadSheet
         visible={dlSheet.visible}

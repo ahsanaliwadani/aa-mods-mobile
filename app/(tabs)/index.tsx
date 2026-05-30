@@ -383,33 +383,188 @@ function LoadingDots({ color }: { color: string }) {
   );
 }
 
-function LoadingScreen({ topInset, colors }: { topInset: number; colors: ReturnType<typeof useColors> }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+function LoadingScreen({ topInset: _topInset, colors }: { topInset: number; colors: ReturnType<typeof useColors> }) {
+  const logoScale = useRef(new Animated.Value(0.55)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const glowPulse = useRef(new Animated.Value(0)).current;
+  const textOpacity = useRef(new Animated.Value(0)).current;
+  const barProgress = useRef(new Animated.Value(0)).current;
+  const shimmerX = useRef(new Animated.Value(-300)).current;
+
   useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: Platform.OS !== "web" }).start();
-  }, [fadeAnim]);
+    const useND = Platform.OS !== "web";
+
+    // Logo entrance — spring pop + fade in
+    Animated.parallel([
+      Animated.spring(logoScale, { toValue: 1, tension: 52, friction: 7, useNativeDriver: useND }),
+      Animated.timing(logoOpacity, { toValue: 1, duration: 520, useNativeDriver: useND }),
+    ]).start();
+
+    // Text fades in slightly after logo
+    Animated.sequence([
+      Animated.delay(320),
+      Animated.timing(textOpacity, { toValue: 1, duration: 480, useNativeDriver: useND }),
+    ]).start();
+
+    // Glow ring pulses forever
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowPulse, { toValue: 1, duration: 1400, useNativeDriver: useND }),
+        Animated.timing(glowPulse, { toValue: 0, duration: 1400, useNativeDriver: useND }),
+      ]),
+    ).start();
+
+    // Fake progress bar — quick to 40%, slow crawl to 88%
+    Animated.sequence([
+      Animated.delay(500),
+      Animated.timing(barProgress, { toValue: 0.4, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+      Animated.timing(barProgress, { toValue: 0.7, duration: 2200, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+      Animated.timing(barProgress, { toValue: 0.88, duration: 3500, easing: Easing.out(Easing.cubic), useNativeDriver: false }),
+    ]).start();
+
+    // Shimmer sweeping across progress bar
+    Animated.loop(
+      Animated.timing(shimmerX, { toValue: 400, duration: 1100, easing: Easing.linear, useNativeDriver: useND }),
+    ).start();
+  }, []);
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        <View style={styles.headerTop}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Image source={require("@/assets/images/icon.png")} style={{ width: 36, height: 36, borderRadius: 10 }} contentFit="cover" cachePolicy="memory-disk" />
-            <View>
-              <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
-              <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
-          {[1, 2, 3, 4, 5].map((i) => <SkeletonAppCard key={i} />)}
+    <View style={{ flex: 1, backgroundColor: colors.background, alignItems: "center", justifyContent: "center" }}>
+
+      {/* Background radial glow behind logo */}
+      <Animated.View
+        style={{
+          position: "absolute",
+          width: 320,
+          height: 320,
+          borderRadius: 160,
+          backgroundColor: colors.primary,
+          opacity: glowPulse.interpolate({ inputRange: [0, 1], outputRange: [0.03, 0.08] }),
+        }}
+      />
+
+      {/* Logo with entrance + glow rings */}
+      <Animated.View
+        style={{
+          opacity: logoOpacity,
+          transform: [{ scale: logoScale }],
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {/* Outer ring — breathes outward */}
+        <Animated.View
+          style={{
+            position: "absolute",
+            width: 130,
+            height: 130,
+            borderRadius: 65,
+            borderWidth: 1.5,
+            borderColor: colors.primary,
+            opacity: glowPulse.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.55] }),
+            transform: [
+              { scale: glowPulse.interpolate({ inputRange: [0, 1], outputRange: [1.05, 1.28] }) },
+            ],
+          }}
+        />
+        {/* Inner glow fill */}
+        <Animated.View
+          style={{
+            position: "absolute",
+            width: 110,
+            height: 110,
+            borderRadius: 55,
+            backgroundColor: colors.primary,
+            opacity: glowPulse.interpolate({ inputRange: [0, 1], outputRange: [0.04, 0.15] }),
+          }}
+        />
+        {/* App icon */}
+        <Image
+          source={require("@/assets/images/icon.png")}
+          style={{ width: 100, height: 100, borderRadius: 26 }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+        />
+      </Animated.View>
+
+      {/* App name + tagline */}
+      <Animated.View style={{ opacity: textOpacity, alignItems: "center", marginTop: 32, gap: 8 }}>
+        <Text style={{
+          fontSize: 34,
+          fontWeight: "800",
+          color: colors.foreground,
+          fontFamily: "Inter_700Bold",
+          letterSpacing: -0.8,
+        }}>
+          AA Mods
+        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ width: 20, height: 1.5, borderRadius: 1, backgroundColor: colors.primary, opacity: 0.6 }} />
+          <Text style={{
+            fontSize: 10,
+            fontWeight: "700",
+            letterSpacing: 2.5,
+            color: colors.accent,
+            fontFamily: "Inter_700Bold",
+          }}>
+            VERIFIED MODS STORE
+          </Text>
+          <View style={{ width: 20, height: 1.5, borderRadius: 1, backgroundColor: colors.primary, opacity: 0.6 }} />
         </View>
       </Animated.View>
-      <View style={[loadingBannerStyles.wrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <LoadingSpinner size={18} color={colors.primary} />
-        <Text style={[loadingBannerStyles.text, { color: colors.mutedForeground }]}>Loading apps</Text>
+
+      {/* Dots + status text pinned near bottom */}
+      <Animated.View
+        style={{
+          position: "absolute",
+          bottom: 52,
+          opacity: textOpacity,
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
         <LoadingDots color={colors.primary} />
+        <Text style={{
+          fontSize: 12,
+          color: colors.mutedForeground,
+          fontFamily: "Inter_400Regular",
+          letterSpacing: 0.2,
+        }}>
+          Fetching latest mods…
+        </Text>
+      </Animated.View>
+
+      {/* Progress bar pinned to bottom edge */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          backgroundColor: "rgba(0,230,115,0.1)",
+        }}
+      >
+        <Animated.View
+          style={{
+            height: "100%",
+            backgroundColor: colors.primary,
+            borderRadius: 2,
+            width: barProgress.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
+            overflow: "hidden",
+          }}
+        >
+          <Animated.View
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              width: 90,
+              backgroundColor: "rgba(255,255,255,0.35)",
+              transform: [{ translateX: shimmerX }],
+            }}
+          />
+        </Animated.View>
       </View>
     </View>
   );
