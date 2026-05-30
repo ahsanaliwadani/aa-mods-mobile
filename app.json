@@ -31,7 +31,10 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.aa.mods",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification", "fetch"]
+        "UIBackgroundModes": [
+          "remote-notification",
+          "fetch"
+        ]
       }
     },
     "android": {
@@ -89,20 +92,24 @@
         "onesignal-expo-plugin",
         {
           "mode": "development",
-          "smallIcons": ["./assets/images/notification-icon.png"],
-          "largeIcons": ["./assets/images/notification-icon.png"]
+          "smallIcons": [
+            "./assets/images/notification-icon.png"
+          ],
+          "largeIcons": [
+            "./assets/images/notification-icon.png"
+          ]
         }
       ]
     ],
     "extra": {
       "eas": {
-        "projectId": "734dbcb5-e59a-4f2d-afc9-b5596a0a30da"
+        "projectId": "a3b800a2-d974-4517-aebc-7ed2089c3746"
       }
     },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "owner": "ahsanali12"
+    "owner": "ahsanwadani"
   }
 }

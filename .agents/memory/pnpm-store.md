@@ -1,20 +1,24 @@
 ---
 name: pnpm store fix
-description: How to resolve pnpm store version mismatch in this Replit environment
+description: How to resolve pnpm store issues in this Replit environment and for EAS builds
 ---
 
-## Problem
-pnpm v11 is in the workspace `node_modules/.bin/pnpm` but the installed node_modules were built with the v10 store at `/home/runner/workspace/.local/share/pnpm/store/v10`. Running `pnpm add` or `pnpm install` fails with `ERR_PNPM_UNEXPECTED_STORE`.
+## Rule
+**Never put a hardcoded `store-dir` pointing to `/home/runner/...` in `.npmrc`.** EAS build servers run as `/home/expo` and will get `EACCES: permission denied, mkdir '/home/runner'` on `pnpm install --frozen-lockfile`.
 
-## Fix
-1. Add `store-dir=/home/runner/workspace/.local/share/pnpm/store/v10` to `.npmrc`
-2. Use the system pnpm binary (v10): `/nix/store/61lr9izijvg30pcribjdxgjxvh3bysp4-pnpm-10.26.1/bin/pnpm`
-3. Run with `--no-frozen-lockfile` flag when adding new packages
+**Why:** The `.npmrc` `store-dir` path is absolute and Replit-specific. EAS build servers don't have a `/home/runner` path, so pnpm fails with a permission error when trying to create the store directory.
 
-**Why:** The Replit environment ships pnpm v10 in nix store; the workspace node_modules/.bin/pnpm symlink may point to v11 depending on CI context.
+**How to apply:** Keep `.npmrc` free of `store-dir`. Let pnpm resolve the store to its default location. This works both locally in Replit and on EAS build servers.
 
-## To add a new package
-```sh
-/nix/store/61lr9izijvg30pcribjdxgjxvh3bysp4-pnpm-10.26.1/bin/pnpm install --no-frozen-lockfile
+## Current .npmrc
 ```
-Or: add the dependency manually to `package.json` and run the above command.
+confirmModulesPurge=false
+```
+(No store-dir — pnpm uses its default, which works in all environments.)
+
+## Adding packages in Replit dev environment
+When adding packages locally, the pnpm version can vary. Use `--no-frozen-lockfile`:
+```sh
+pnpm install --no-frozen-lockfile
+```
+Or add dependencies directly to `package.json` and then run `pnpm install --no-frozen-lockfile`.
