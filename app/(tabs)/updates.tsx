@@ -17,6 +17,7 @@ import { haptics } from "@/lib/haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 import { useFirebaseCatalog, type LiveStoreCatalogApp } from "@/hooks/useFirebaseCatalog";
+import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import colors from "@/constants/colors";
 import { logScreenView, logUpdatesFilterChanged, logAppCardPress } from "@/lib/analytics";
 
@@ -117,7 +118,7 @@ function UpdateCard({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () =>
   );
 }
 
-type FilterMode = "all" | "new";
+type FilterMode = "all" | "new" | "mine";
 
 type FlatItem =
   | { type: "header"; label: string }
@@ -132,6 +133,23 @@ export default function UpdatesScreen() {
   const [filter, setFilter] = useState<FilterMode>("all");
 
   const { apps, newCount } = useFirebaseCatalog();
+  const dm = useDownloadManager();
+
+  const myDownloadedSlugs = useMemo(() => {
+    const slugs = new Set<string>();
+    for (const [slug, entry] of dm.downloads) {
+      if (entry.phase !== "idle") slugs.add(slug);
+    }
+    for (const slug of Object.keys(dm.installedApps)) {
+      slugs.add(slug);
+    }
+    return slugs;
+  }, [dm.downloads, dm.installedApps]);
+
+  const myAppsCount = useMemo(
+    () => apps.filter((a) => myDownloadedSlugs.has(a.slug)).length,
+    [apps, myDownloadedSlugs],
+  );
 
   React.useEffect(() => { logScreenView("updates"); }, []);
 
@@ -145,10 +163,11 @@ export default function UpdatesScreen() {
     [apps],
   );
 
-  const filtered = useMemo(
-    () => (filter === "new" ? sorted.filter((a) => a.isNew) : sorted),
-    [sorted, filter],
-  );
+  const filtered = useMemo(() => {
+    if (filter === "new") return sorted.filter((a) => a.isNew);
+    if (filter === "mine") return sorted.filter((a) => myDownloadedSlugs.has(a.slug));
+    return sorted;
+  }, [sorted, filter, myDownloadedSlugs]);
 
   const flatItems = useMemo<FlatItem[]>(() => {
     const out: FlatItem[] = [];
@@ -262,6 +281,36 @@ export default function UpdatesScreen() {
               New This Week ({newCount})
             </Text>
           </Pressable>
+
+          {myAppsCount > 0 && (
+            <Pressable
+              onPress={() => {
+                haptics.selection();
+                setFilter("mine");
+                logUpdatesFilterChanged("mine", myAppsCount);
+              }}
+              style={[
+                styles.chip,
+                filter === "mine"
+                  ? { backgroundColor: "#fbbf24", borderColor: "#fbbf24" }
+                  : { backgroundColor: themeColors.secondary, borderColor: "rgba(251,191,36,0.35)" },
+              ]}
+            >
+              <Ionicons
+                name="download-outline"
+                size={12}
+                color={filter === "mine" ? "#04131b" : "#fbbf24"}
+              />
+              <Text
+                style={[
+                  styles.chipText,
+                  { color: filter === "mine" ? "#04131b" : "#fbbf24" },
+                ]}
+              >
+                My Apps ({myAppsCount})
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -298,16 +347,16 @@ export default function UpdatesScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons
-              name={filter === "new" ? "sparkles-outline" : "refresh-circle-outline"}
+              name={filter === "new" ? "sparkles-outline" : filter === "mine" ? "download-outline" : "refresh-circle-outline"}
               size={52}
               color={themeColors.mutedForeground}
               style={{ opacity: 0.35 }}
             />
             <Text style={[styles.emptyTitle, { color: themeColors.foreground }]}>
-              {filter === "new" ? "No new apps this week" : "No updates yet"}
+              {filter === "new" ? "No new apps this week" : filter === "mine" ? "No downloads yet" : "No updates yet"}
             </Text>
             <Text style={[styles.emptySub, { color: themeColors.mutedForeground }]}>
-              {filter === "new" ? "Switch to All to see everything" : "Pull down to refresh"}
+              {filter === "new" ? "Switch to All to see everything" : filter === "mine" ? "Download an app and it will appear here" : "Pull down to refresh"}
             </Text>
           </View>
         }

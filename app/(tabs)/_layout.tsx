@@ -1,16 +1,18 @@
 import { BlurView as _BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { Platform, StyleSheet, View, Text } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
-import { useFirebaseCatalog } from "@/hooks/useFirebaseCatalog";
+import { useFirebaseCatalog, type LiveStoreCatalogApp } from "@/hooks/useFirebaseCatalog";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { useNotificationInbox } from "@/contexts/NotificationInboxContext";
 import { useUpdateNotifications } from "@/hooks/useUpdateNotifications";
 import { useInstalledAppChecker } from "@/hooks/useInstalledAppChecker";
+import { useDownloadedAppUpdates } from "@/hooks/useDownloadedAppUpdates";
+import { UpdateToast } from "@/components/UpdateToast";
 
 const BlurView = _BlurView as unknown as React.ComponentType<{
   intensity?: number;
@@ -54,12 +56,26 @@ export default function TabLayout() {
   const { newCount, apps } = useFirebaseCatalog();
   const dm = useDownloadManager();
   const { unreadCount, addItem } = useNotificationInbox();
+
+  const [toastApps, setToastApps] = useState<LiveStoreCatalogApp[]>([]);
+  const [showToast, setShowToast] = useState(false);
+
+  const handleNewUpdates = useCallback((updatedApps: LiveStoreCatalogApp[]) => {
+    setToastApps(updatedApps);
+    setShowToast(true);
+  }, []);
+
   useUpdateNotifications(addItem);
   useInstalledAppChecker(apps);
+  const { appsWithUpdates } = useDownloadedAppUpdates(apps, addItem, handleNewUpdates);
 
   const activeDownloads = Array.from(dm.downloads.values()).filter(
     (e) => e.phase === "downloading" || e.phase === "resolving",
   ).length;
+
+  const personalUpdateCount = appsWithUpdates.length;
+  const updatesBadgeCount = personalUpdateCount > 0 ? personalUpdateCount : newCount;
+  const updatesBadgeColor = personalUpdateCount > 0 ? "#fbbf24" : "#00e673";
 
   return (
     <View style={{ flex: 1 }}>
@@ -114,7 +130,7 @@ export default function TabLayout() {
                   size={24}
                   color={color}
                 />
-                <Badge count={newCount} />
+                <Badge count={updatesBadgeCount} color={updatesBadgeColor} />
               </View>
             ),
           }}
@@ -164,6 +180,12 @@ export default function TabLayout() {
         />
       </Tabs>
 
+      {showToast && toastApps.length > 0 && (
+        <UpdateToast
+          apps={toastApps}
+          onDismiss={() => { setShowToast(false); setToastApps([]); }}
+        />
+      )}
     </View>
   );
 }

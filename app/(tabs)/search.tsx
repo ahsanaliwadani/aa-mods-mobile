@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -75,6 +76,7 @@ export default function SearchScreen() {
   const [focused, setFocused] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [activeCategory, setActiveCategory] = useState("All");
 
   const { apps, loading, connected } = useFirebaseCatalog();
 
@@ -107,17 +109,26 @@ export default function SearchScreen() {
     AsyncStorage.removeItem(RECENT_SEARCHES_KEY).catch(() => {});
   };
 
+  const categories = useMemo(() => {
+    const cats = Array.from(new Set(apps.map((a) => a.category))).sort();
+    return ["All", ...cats];
+  }, [apps]);
+
   const results = useMemo(() => {
     const normalized = normalizeSearch(query);
-    if (!normalized) return apps;
+    let list = apps;
+    if (activeCategory !== "All") {
+      list = list.filter((app) => app.category === activeCategory);
+    }
+    if (!normalized) return list;
     const tokens = normalized.split(/\s+/).filter(Boolean);
-    return apps.filter((app) => {
+    return list.filter((app) => {
       const searchable = normalizeSearch(
         [app.name, app.shortDescription, app.category, app.slug, app.seoKeywords, app.subtitle].join(" "),
       );
       return tokens.every((token) => searchable.includes(token));
     });
-  }, [query, apps]);
+  }, [query, apps, activeCategory]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -183,6 +194,37 @@ export default function SearchScreen() {
             </Pressable>
           )}
         </View>
+
+        {/* Category filter chips */}
+        {!query && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingTop: 10, paddingBottom: 2 }}
+            style={{ marginTop: 4 }}
+          >
+            {categories.map((cat) => {
+              const isActive = activeCategory === cat;
+              return (
+                <Pressable
+                  key={cat}
+                  onPress={() => { setActiveCategory(cat); haptics.selection(); }}
+                  style={[
+                    styles.catChip,
+                    {
+                      backgroundColor: isActive ? colors.primary : colors.secondary,
+                      borderColor: isActive ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.catChipText, { color: isActive ? colors.primaryForeground : colors.mutedForeground }]}>
+                    {cat}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
 
         {/* Recent searches inline */}
         {showRecent && (
@@ -284,4 +326,11 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 10 },
   emptyTitle: { fontSize: 18, fontWeight: "700", fontFamily: "Inter_700Bold" },
   emptySubtitle: { fontSize: 14, fontFamily: "Inter_400Regular" },
+  catChip: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  catChipText: { fontSize: 12, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
 });

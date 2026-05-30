@@ -708,6 +708,17 @@ export default function HomeScreen() {
 
   const featuredApps = useMemo(() => apps.filter((a) => a.isNew).slice(0, 10), [apps]);
 
+  const myApps = useMemo(() => {
+    const slugSet = new Set<string>();
+    for (const [slug, entry] of dm.downloads) {
+      if (entry.phase !== "idle") slugSet.add(slug);
+    }
+    for (const slug of Object.keys(dm.installedApps)) {
+      slugSet.add(slug);
+    }
+    return apps.filter((app) => slugSet.has(app.slug));
+  }, [apps, dm.downloads, dm.installedApps]);
+
   const handleAppPress = useCallback((app: LiveStoreCatalogApp) => {
     haptics.light();
     logAppCardPress(app.slug, app.name);
@@ -898,6 +909,76 @@ export default function HomeScreen() {
               />
             )}
 
+            {/* My Apps — horizontal scroll of downloaded/installed apps */}
+            {myApps.length > 0 && (
+              <View style={{ marginTop: 10 }}>
+                <View style={[styles.listHeader, { paddingBottom: 4 }]}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Ionicons name="download-circle" size={15} color="#fbbf24" />
+                    <Text style={[styles.listHeaderTitle, { color: colors.foreground }]}>My Apps</Text>
+                  </View>
+                  <Pressable
+                    onPress={() => router.push("/(tabs)/updates")}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                  >
+                    <Text style={[styles.listHeaderCount, { color: colors.accent }]}>
+                      {myApps.length} downloaded
+                    </Text>
+                  </Pressable>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingLeft: 16, paddingRight: 8, gap: 10, paddingBottom: 4 }}
+                >
+                  {myApps.map((item) => {
+                    const hasUpd = dm.hasUpdate(item.slug, item.version);
+                    const isInst = dm.isInstalled(item.slug);
+                    return (
+                      <Pressable
+                        key={item.slug}
+                        onPress={() => handleAppPress(item)}
+                        style={({ pressed }) => [
+                          myAppStyles.card,
+                          {
+                            backgroundColor: colors.card,
+                            borderColor: hasUpd
+                              ? "rgba(251,191,36,0.4)"
+                              : isInst
+                              ? "rgba(0,230,115,0.3)"
+                              : colors.border,
+                            opacity: pressed ? 0.85 : 1,
+                          },
+                        ]}
+                      >
+                        <View style={{ position: "relative" }}>
+                          <AppIcon uri={item.iconImage} slug={item.slug} overrideUri={item.iconOverrideUri} size={52} borderRadius={14} />
+                          {hasUpd && (
+                            <View style={[myAppStyles.statusDot, { backgroundColor: "#fbbf24", borderColor: colors.background }]}>
+                              <Ionicons name="arrow-up" size={7} color="#04131b" />
+                            </View>
+                          )}
+                          {!hasUpd && isInst && (
+                            <View style={[myAppStyles.statusDot, { backgroundColor: "#00e673", borderColor: colors.background }]} />
+                          )}
+                        </View>
+                        <Text style={[myAppStyles.name, { color: colors.foreground }]} numberOfLines={1}>{item.name}</Text>
+                        <View style={[myAppStyles.verBadge, hasUpd
+                          ? { backgroundColor: "rgba(251,191,36,0.12)", borderColor: "rgba(251,191,36,0.3)" }
+                          : { backgroundColor: "rgba(0,230,115,0.1)", borderColor: "rgba(0,230,115,0.2)" }
+                        ]}>
+                          {hasUpd && <Ionicons name="arrow-up-circle" size={9} color="#fbbf24" />}
+                          <Text style={[myAppStyles.verText, { color: hasUpd ? "#fbbf24" : "#00e673" }]}>
+                            v{item.version}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
             {/* Featured — horizontal ScrollView (no nested FlatList) */}
             {featuredApps.length > 0 && (
               <View style={{ marginTop: 10 }}>
@@ -1037,6 +1118,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   bellBadgeText: { color: "#04131b", fontSize: 8, fontWeight: "800", fontFamily: "Inter_700Bold" },
+});
+
+const myAppStyles = StyleSheet.create({
+  card: {
+    width: 100,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+    alignItems: "center",
+    gap: 6,
+  },
+  statusDot: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  name: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold", textAlign: "center" },
+  verBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    borderRadius: 7,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  verText: { fontSize: 9, fontWeight: "700", fontFamily: "Inter_700Bold" },
 });
 
 const loadingBannerStyles = StyleSheet.create({
