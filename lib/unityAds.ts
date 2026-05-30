@@ -11,9 +11,15 @@ export const PLACEMENT_REWARDED = Platform.OS === "ios"
   ? "Rewarded_iOS"
   : "Rewarded_Android";
 
+export const PLACEMENT_BANNER = Platform.OS === "ios"
+  ? "Banner_iOS"
+  : "Banner_Android";
+
 let _initialized = false;
 let _lastInterstitialTime = 0;
-const MIN_INTERSTITIAL_INTERVAL_MS = 45_000; // min 45s between interstitials
+const MIN_INTERSTITIAL_INTERVAL_MS = 45_000;
+
+type RewardedResult = "SKIPPED" | "COMPLETED" | "ERROR" | null;
 
 function getRNUnityAds() {
   if (Platform.OS === "web") return null;
@@ -26,9 +32,9 @@ function getRNUnityAds() {
 
 /**
  * Initialize Unity Ads. Call once on app start.
- * testMode=true during development, false for production.
+ * Native bridge method is `init(gameId)` — no testMode param in the bridge.
  */
-export function initializeUnityAds(testMode = false): void {
+export function initializeUnityAds(_testMode = false): void {
   if (Platform.OS === "web") return;
   if (_initialized) return;
   try {
@@ -36,11 +42,17 @@ export function initializeUnityAds(testMode = false): void {
     if (!UnityAds) return;
 
     const gameId = Platform.OS === "ios" ? GAME_ID_IOS : GAME_ID_ANDROID;
-    UnityAds.initialize(gameId, testMode);
+
+    // The native bridge exports `init(gameId)` — not `initialize`
+    UnityAds.init(gameId);
     _initialized = true;
 
     UnityAds.addEventListener("onReady", (placementId: string) => {
       console.log(`[UnityAds] Ready: ${placementId}`);
+    });
+
+    UnityAds.addEventListener("onStart", (placementId: string) => {
+      console.log(`[UnityAds] Started: ${placementId}`);
     });
 
     UnityAds.addEventListener("onError", (error: string, message: string) => {
@@ -56,21 +68,35 @@ export function initializeUnityAds(testMode = false): void {
 }
 
 /**
- * Check if an interstitial ad is ready to show.
+ * Check if an ad placement is ready to show.
  */
-export function isInterstitialReady(): Promise<boolean> {
+function isPlacementReady(placementId: string): Promise<boolean> {
   return new Promise((resolve) => {
     if (Platform.OS === "web" || !_initialized) { resolve(false); return; }
     try {
       const UnityAds = getRNUnityAds();
       if (!UnityAds) { resolve(false); return; }
-      UnityAds.isReady(PLACEMENT_INTERSTITIAL, (ready: boolean) => {
+      UnityAds.isReady(placementId, (ready: boolean) => {
         resolve(Boolean(ready));
       });
     } catch {
       resolve(false);
     }
   });
+}
+
+/**
+ * Check if an interstitial ad is ready to show.
+ */
+export function isInterstitialReady(): Promise<boolean> {
+  return isPlacementReady(PLACEMENT_INTERSTITIAL);
+}
+
+/**
+ * Check if a rewarded ad is ready to show.
+ */
+export function isRewardedReady(): Promise<boolean> {
+  return isPlacementReady(PLACEMENT_REWARDED);
 }
 
 /**
@@ -104,7 +130,7 @@ export async function showInterstitial(): Promise<boolean> {
  * Show a rewarded ad. Returns a promise that resolves to the result string
  * ('SKIPPED', 'COMPLETED', 'ERROR') or null if the ad couldn't be shown.
  */
-export async function showRewarded(): Promise<string | null> {
+export async function showRewarded(): Promise<RewardedResult> {
   if (Platform.OS === "web") return null;
   if (!_initialized) return null;
 
@@ -114,11 +140,12 @@ export async function showRewarded(): Promise<string | null> {
       if (!UnityAds) { resolve(null); return; }
 
       let resolved = false;
+
       const handler = (placementId: string, result: string) => {
         if (placementId === PLACEMENT_REWARDED && !resolved) {
           resolved = true;
           UnityAds.removeEventListener("onFinish", handler);
-          resolve(result);
+          resolve(result as RewardedResult);
         }
       };
 
@@ -128,12 +155,22 @@ export async function showRewarded(): Promise<string | null> {
         UnityAds.show(PLACEMENT_REWARDED);
       });
 
-      // Safety timeout
+      // Safety timeout — resolve null if no callback in 30s
       setTimeout(() => {
-        if (!resolved) { resolved = true; resolve(null); }
+        if (!resolved) {
+          resolved = true;
+          resolve(null);
+        }
       }, 30_000);
     } catch {
       resolve(null);
     }
   });
+}
+
+/**
+ * Returns whether Unity Ads has been initialized.
+ */
+export function isUnityAdsInitialized(): boolean {
+  return _initialized;
 }
