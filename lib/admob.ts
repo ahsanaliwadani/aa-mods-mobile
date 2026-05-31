@@ -5,7 +5,7 @@ export const ADMOB_APP_ID = "ca-app-pub-7386485617389952~7325371535";
 export const AD_UNITS = {
   BANNER_1: "ca-app-pub-7386485617389952/7663752652",
   BANNER_2: "ca-app-pub-7386485617389952/9758596209",
-  NATIVE_ADVANCED: "ca-app-pub-7386485617389952/542998432",
+  NATIVE_ADVANCED: "ca-app-pub-7386485617389952/5429984321",
   APP_OPEN: "ca-app-pub-7386485617389952/9177657642",
   INTERSTITIAL: "ca-app-pub-7386485617389952/4082233314",
   REWARDED: "ca-app-pub-7386485617389952/3085376641",
@@ -42,19 +42,5 @@ export function isAdMobAvailable(): boolean {
 }
 
 export function getAdUnitId(key: keyof typeof AD_UNITS): string {
-  if (__DEV__) {
-    try {
-      const { TestIds } = require("react-native-google-mobile-ads");
-      const map: Partial<Record<keyof typeof AD_UNITS, string>> = {
-        BANNER_1: TestIds.BANNER,
-        BANNER_2: TestIds.BANNER,
-        INTERSTITIAL: TestIds.INTERSTITIAL,
-        REWARDED: TestIds.REWARDED,
-        APP_OPEN: TestIds.APP_OPEN,
-        NATIVE_ADVANCED: TestIds.ADAPTIVE_BANNER,
-      };
-      if (map[key]) return map[key]!;
-    } catch {}
-  }
   return AD_UNITS[key];
 }
