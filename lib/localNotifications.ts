@@ -5,6 +5,8 @@ import Constants from "expo-constants";
 const isExpoGo = Constants.appOwnership === "expo";
 export const canLocalNotify = Platform.OS !== "web" && !isExpoGo;
 
+const BRAND_COLOR = "#00e673";
+
 async function schedule(content: Notifications.NotificationContentInput): Promise<void> {
   if (!canLocalNotify) return;
   try {
@@ -23,27 +25,53 @@ async function schedule(content: Notifications.NotificationContentInput): Promis
   }
 }
 
-export async function notifyDownloadStarted(appName: string): Promise<void> {
+function androidExtra(channelId: string, priority: "default" | "high" | "max" = "default") {
+  if (Platform.OS !== "android") return {};
+  return {
+    channelId,
+    color: BRAND_COLOR,
+    priority,
+    sticky: false,
+  };
+}
+
+export async function notifyDownloadStarted(appName: string, iconUri?: string): Promise<void> {
   await schedule({
-    title: "Download Started",
+    title: "⬇️ Download Started",
     body: `Downloading ${appName}…`,
     data: { type: "download_start", appName },
     sound: undefined,
-    ...(Platform.OS === "android"
-      ? { channelId: "aa-mods-general" }
-      : {}),
+    ...androidExtra("aa-mods-general"),
+    ...(iconUri ? { attachments: [] } : {}),
   });
 }
 
-export async function notifyDownloadFinished(appName: string): Promise<void> {
+export async function notifyDownloadProgress(
+  appName: string,
+  progressPct: number,
+  mbWritten: number,
+  mbTotal: number,
+): Promise<void> {
+  if (progressPct % 25 !== 0 || progressPct === 0) return;
+  const sizeStr = mbTotal > 0 ? ` · ${mbWritten.toFixed(1)}/${mbTotal.toFixed(1)} MB` : "";
   await schedule({
-    title: "Download Complete ✓",
-    body: `${appName} is ready to install!`,
+    title: `⬇️ ${progressPct}% — ${appName}`,
+    body: `Downloading${sizeStr}`,
+    data: { type: "download_progress", appName, progressPct },
+    sound: undefined,
+    ...androidExtra("aa-mods-general"),
+  });
+}
+
+export async function notifyDownloadFinished(appName: string, version?: string): Promise<void> {
+  await schedule({
+    title: "✅ Download Complete",
+    body: version
+      ? `${appName} v${version} is ready to install!`
+      : `${appName} is ready to install — tap to open.`,
     data: { type: "download_done", appName },
     sound: "default",
-    ...(Platform.OS === "android"
-      ? { channelId: "aa-mods-updates" }
-      : {}),
+    ...androidExtra("aa-mods-updates", "high"),
   });
 }
 
@@ -52,15 +80,13 @@ export async function notifyDownloadFailed(
   error?: string,
 ): Promise<void> {
   await schedule({
-    title: "Download Failed",
+    title: "❌ Download Failed",
     body: error
       ? `${appName}: ${error.slice(0, 80)}`
       : `Failed to download ${appName}. Tap to retry.`,
     data: { type: "download_error", appName },
     sound: "default",
-    ...(Platform.OS === "android"
-      ? { channelId: "aa-mods-general" }
-      : {}),
+    ...androidExtra("aa-mods-general", "high"),
   });
 }
 
@@ -69,7 +95,7 @@ export async function notifyUpdateAvailable(
   firstAppName?: string,
 ): Promise<void> {
   const title =
-    count === 1 ? "1 Update Available" : `${count} Updates Available`;
+    count === 1 ? "🆕 1 Update Available" : `🆕 ${count} Updates Available`;
   const body =
     count === 1 && firstAppName
       ? `${firstAppName} has been updated — tap to download.`
@@ -79,9 +105,7 @@ export async function notifyUpdateAvailable(
     body,
     data: { type: "update_available", count },
     sound: "default",
-    ...(Platform.OS === "android"
-      ? { channelId: "aa-mods-updates" }
-      : {}),
+    ...androidExtra("aa-mods-updates", "high"),
   });
 }
 
@@ -90,13 +114,11 @@ export async function notifyNewApp(
   category: string,
 ): Promise<void> {
   await schedule({
-    title: "New Mod Added 🎉",
+    title: "🎉 New Mod Added",
     body: `${appName} (${category}) is now available on AA Mods Store.`,
     data: { type: "new_app", appName },
     sound: "default",
-    ...(Platform.OS === "android"
-      ? { channelId: "aa-mods-updates" }
-      : {}),
+    ...androidExtra("aa-mods-updates"),
   });
 }
 
@@ -104,7 +126,7 @@ export async function notifyInstalledAppsUpdated(
   appNames: string[],
   count: number,
 ): Promise<void> {
-  const title = count === 1 ? "App Update Available" : `${count} Apps Need Updates`;
+  const title = count === 1 ? "🔔 App Update Available" : `🔔 ${count} Apps Need Updates`;
   const body =
     count === 1
       ? `${appNames[0]} has a new version — tap to update now.`
@@ -114,8 +136,6 @@ export async function notifyInstalledAppsUpdated(
     body,
     data: { type: "installed_update", count, appNames },
     sound: "default",
-    ...(Platform.OS === "android"
-      ? { channelId: "aa-mods-updates" }
-      : {}),
+    ...androidExtra("aa-mods-updates", "high"),
   });
 }

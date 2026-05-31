@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { useDownloadManager, type DownloadEntry, SPEED_BOOST_DURATION_MS } from "@/contexts/DownloadManagerContext";
+import { useDownloadManager, type DownloadEntry, type DownloadHistoryEntry, SPEED_BOOST_DURATION_MS } from "@/contexts/DownloadManagerContext";
 import { AppIcon } from "@/components/AppIcon";
 import { haptics } from "@/lib/haptics";
 import { logScreenView } from "@/lib/analytics";
@@ -42,6 +42,45 @@ function formatBoostCountdown(until: number): string {
   const mins = Math.floor(ms / 60000);
   const secs = Math.floor((ms % 60000) / 1000);
   return `${mins}m ${secs}s`;
+}
+
+function formatHistoryDate(ts: number): string {
+  const d = new Date(ts);
+  const diffDays = Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 0) return `Today · ${time}`;
+  if (diffDays === 1) return `Yesterday · ${time}`;
+  return `${d.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })} · ${time}`;
+}
+
+function HistoryCard({ entry, onPress }: { entry: DownloadHistoryEntry; onPress: () => void }) {
+  const colors = useColors();
+  const sizeStr = entry.bytesTotal > 0 ? formatBytes(entry.bytesTotal) : "";
+  const outcomeColor = entry.outcome === "installed" ? "#22d3ee" : entry.outcome === "failed" ? "#ef4444" : colors.primary;
+  const outcomeIcon: "checkmark-done-circle" | "alert-circle" | "checkmark-circle" =
+    entry.outcome === "installed" ? "checkmark-done-circle" : entry.outcome === "failed" ? "alert-circle" : "checkmark-circle";
+  const outcomeLabel = entry.outcome === "installed" ? "Installed" : entry.outcome === "failed" ? "Failed" : "Downloaded";
+  return (
+    <Pressable
+      onPress={() => { haptics.light(); onPress(); }}
+      style={({ pressed }) => [styles.card, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.92 : 1 }]}
+    >
+      <View style={styles.cardRow}>
+        <AppIcon uri={entry.iconUri} slug={entry.slug} size={46} borderRadius={12} iconSize={22} />
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={[styles.appName, { color: colors.foreground }]} numberOfLines={1}>{entry.appName}</Text>
+          <Text style={[styles.version, { color: colors.mutedForeground }]}>v{entry.storeVersion}{sizeStr ? ` · ${sizeStr}` : ""}</Text>
+          <View style={styles.phaseRow}>
+            <Ionicons name={outcomeIcon} size={12} color={outcomeColor} />
+            <Text style={[styles.phaseLabel, { color: outcomeColor }]}>{outcomeLabel}</Text>
+          </View>
+        </View>
+        <Text style={[styles.version, { color: colors.mutedForeground, textAlign: "right", fontSize: 11, maxWidth: 90 }]}>
+          {formatHistoryDate(entry.completedAt)}
+        </Text>
+      </View>
+    </Pressable>
+  );
 }
 
 function DownloadCard({
@@ -286,6 +325,7 @@ export default function DownloadsScreen() {
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const dm = useDownloadManager();
   const [boostCountdown, setBoostCountdown] = React.useState("");
+  const [activeView, setActiveView] = React.useState<"downloads" | "history">("downloads");
 
   const handleRewardEarned = React.useCallback(() => {
     dm.activateSpeedBoost(SPEED_BOOST_DURATION_MS);
@@ -326,28 +366,79 @@ export default function DownloadsScreen() {
           <Text style={[styles.eyebrow, { color: colors.accent }]}>AA MODS</Text>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Downloads</Text>
         </View>
-        {hasCompletedOrInstalled && (
-          <Pressable
-            onPress={() => {
-              haptics.medium();
-              Alert.alert(
-                "Clear All",
-                "This will remove all completed downloads and their APK files from device storage. Installed apps will remain on your phone.",
-                [
+        <View style={styles.headerRight}>
+          <View style={[styles.viewToggle, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+            <Pressable
+              onPress={() => { haptics.selection(); setActiveView("downloads"); }}
+              style={[styles.viewToggleBtn, activeView === "downloads" && { backgroundColor: "rgba(0,230,115,0.12)" }]}
+            >
+              <Text style={[styles.viewToggleTxt, { color: activeView === "downloads" ? colors.primary : colors.mutedForeground }]}>Downloads</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => { haptics.selection(); setActiveView("history"); }}
+              style={[styles.viewToggleBtn, activeView === "history" && { backgroundColor: "rgba(0,230,115,0.12)" }]}
+            >
+              <Text style={[styles.viewToggleTxt, { color: activeView === "history" ? colors.primary : colors.mutedForeground }]}>History</Text>
+              {dm.downloadHistory.length > 0 && (
+                <View style={[styles.historyCountBadge, { backgroundColor: activeView === "history" ? "rgba(0,230,115,0.2)" : colors.card }]}>
+                  <Text style={[styles.historyCountText, { color: activeView === "history" ? colors.primary : colors.mutedForeground }]}>
+                    {dm.downloadHistory.length}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
+          {activeView === "downloads" && hasCompletedOrInstalled && (
+            <Pressable
+              onPress={() => {
+                haptics.medium();
+                Alert.alert("Clear All", "This will remove all completed downloads and their APK files from device storage. Installed apps will remain on your phone.", [
                   { text: "Cancel", style: "cancel" },
                   { text: "Clear All", style: "destructive", onPress: () => dm.clearAllCompleted() },
-                ],
-              );
-            }}
-            style={({ pressed }) => [styles.clearBtn, { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.8 : 1 }]}
-          >
-            <Ionicons name="trash-outline" size={14} color={colors.mutedForeground} />
-            <Text style={[styles.clearBtnText, { color: colors.mutedForeground }]}>Clear</Text>
-          </Pressable>
-        )}
+                ]);
+              }}
+              style={({ pressed }) => [styles.clearBtn, { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Ionicons name="trash-outline" size={14} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+          {activeView === "history" && dm.downloadHistory.length > 0 && (
+            <Pressable
+              onPress={() => { haptics.medium(); dm.clearHistory(); }}
+              style={({ pressed }) => [styles.clearBtn, { backgroundColor: colors.secondary, borderColor: colors.border, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Ionicons name="trash-outline" size={14} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
-      {allEntries.length === 0 ? (
+      {activeView === "history" ? (
+        dm.downloadHistory.length === 0 ? (
+          <View style={styles.emptyOuter}>
+            <View style={styles.emptyState}>
+              <View style={[styles.emptyIconWrap, { backgroundColor: "rgba(34,211,238,0.07)", borderColor: "rgba(34,211,238,0.2)" }]}>
+                <Ionicons name="time-outline" size={40} color="rgba(34,211,238,0.4)" />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No history yet</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+                Completed and installed downloads will appear here with date and time.
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[styles.scroll, { paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100 }]}
+          >
+            <View style={styles.section}>
+              {dm.downloadHistory.map((h) => (
+                <HistoryCard key={h.id} entry={h} onPress={() => goToApp(h.slug)} />
+              ))}
+            </View>
+          </ScrollView>
+        )
+      ) : allEntries.length === 0 ? (
         <View style={styles.emptyOuter}>
           <View style={styles.emptyState}>
             <View style={[styles.emptyIconWrap, { backgroundColor: "rgba(0,230,115,0.07)", borderColor: "rgba(0,230,115,0.2)" }]}>
@@ -669,4 +760,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   browseBtnText: { fontSize: 15, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
+  viewToggle: { flexDirection: "row", borderRadius: 10, borderWidth: 1, overflow: "hidden" },
+  viewToggleBtn: { paddingHorizontal: 10, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 4 },
+  viewToggleTxt: { fontSize: 12, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  historyCountBadge: { borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
+  historyCountText: { fontSize: 9, fontWeight: "800", fontFamily: "Inter_700Bold" },
 });

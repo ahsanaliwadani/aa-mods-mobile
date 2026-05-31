@@ -83,6 +83,20 @@ export type InstalledApp = {
   installedAt: string;
 };
 
+export type DownloadHistoryEntry = {
+  id: string;
+  slug: string;
+  appName: string;
+  storeVersion: string;
+  iconUri?: string;
+  bytesTotal: number;
+  outcome: "downloaded" | "installed" | "failed";
+  completedAt: number;
+};
+
+const HISTORY_KEY = "@aa_mods_download_history_v1";
+const MAX_HISTORY = 200;
+
 type DownloadManagerContextType = {
   downloads: Map<string, DownloadEntry>;
   isRestoreComplete: boolean;
@@ -112,6 +126,8 @@ type DownloadManagerContextType = {
   downloadDirUri: string | null;
   setDownloadDir: (uri: string | null) => void;
   pickDownloadDir: () => Promise<string | null>;
+  downloadHistory: DownloadHistoryEntry[];
+  clearHistory: () => void;
 };
 
 const DownloadManagerContext = createContext<DownloadManagerContextType | null>(null);
@@ -147,6 +163,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   const [downloadDirUri, setDownloadDirUriState] = useState<string | null>(null);
   const [isRestoreComplete, setIsRestoreComplete] = useState(false);
   const [speedBoostUntil, setSpeedBoostUntil] = useState<number | null>(null);
+  const [downloadHistory, setDownloadHistory] = useState<DownloadHistoryEntry[]>([]);
 
   const isSpeedBoosted = speedBoostUntil !== null && Date.now() < speedBoostUntil;
 
@@ -241,8 +258,18 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       })
       .catch(() => {});
 
+    const loadHistory = AsyncStorage.getItem(HISTORY_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const arr = JSON.parse(raw) as DownloadHistoryEntry[];
+        if (Array.isArray(arr) && arr.length > 0) {
+          setDownloadHistory(arr);
+        }
+      })
+      .catch(() => {});
+
     // Mark restore complete after all loads settle (success or failure)
-    Promise.allSettled([loadInstalled, loadDownloads, loadDir, loadBoost]).then(() => {
+    Promise.allSettled([loadInstalled, loadDownloads, loadDir, loadBoost, loadHistory]).then(() => {
       setIsRestoreComplete(true);
     });
   }, []);
@@ -359,6 +386,30 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       if (existing) {
         next.set(slug, { ...existing, ...patch });
       }
+      return next;
+    });
+  }, []);
+
+  const addToHistory = useCallback((
+    slug: string,
+    outcome: DownloadHistoryEntry["outcome"],
+  ) => {
+    const entry = downloadsRef.current.get(slug);
+    if (!entry) return;
+    const histEntry: DownloadHistoryEntry = {
+      id: `${slug}_${Date.now()}`,
+      slug,
+      appName: entry.appName,
+      storeVersion: entry.storeVersion,
+      iconUri: entry.iconUri,
+      bytesTotal: entry.bytesTotal,
+      outcome,
+      completedAt: Date.now(),
+    };
+    setDownloadHistory((prev) => {
+      const filtered = prev.filter((h) => h.slug !== slug);
+      const next = [histEntry, ...filtered].slice(0, MAX_HISTORY);
+      AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(next)).catch(() => {});
       return next;
     });
   }, []);
@@ -614,9 +665,11 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
             apkPath: finalApkPath,
           });
 
+          addToHistory(slug, "downloaded");
+
           getNotifPrefs().then((notifPrefs) => {
             if (notifPrefs.showDownloadNotifications && notifPrefs.notifyOnDownloadComplete) {
-              notifyDownloadFinished(appName).catch(() => {});
+              notifyDownloadFinished(appName, storeVersion).catch(() => {});
             }
           }).catch(() => {});
 
@@ -720,6 +773,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
         markInstalled(slug, entry.storeVersion);
         logApkInstalled(slug, entry.appName, entry.storeVersion);
+        addToHistory(slug, "installed");
 
         updateEntry(slug, { phase: "installed" });
       } catch {
@@ -795,6 +849,11 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     });
   }, []);
 
+  const clearHistory = useCallback(() => {
+    setDownloadHistory([]);
+    AsyncStorage.removeItem(HISTORY_KEY).catch(() => {});
+  }, []);
+
   const getEntry = useCallback(
     (slug: string) => downloadsRef.current.get(slug),
     [],
@@ -861,6 +920,8 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         downloadDirUri,
         setDownloadDir,
         pickDownloadDir,
+        downloadHistory,
+        clearHistory,
       }}
     >
       {children}

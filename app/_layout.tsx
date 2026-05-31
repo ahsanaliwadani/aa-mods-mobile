@@ -33,6 +33,7 @@ import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { initializeOneSignal, setInboxCallback } from "@/lib/oneSignal";
 import { initializeAdMob } from "@/lib/admob";
+import { initCrashlytics } from "@/lib/crashlytics";
 import { useAppOpenAd } from "@/hooks/useAppOpenAd";
 
 const GestureHandlerRootView = _GestureHandlerRootView as unknown as React.ComponentType<{
@@ -46,6 +47,7 @@ SplashScreen.preventAutoHideAsync();
 
 initializeOneSignal();
 initializeAdMob();
+initCrashlytics();
 
 if (Platform.OS !== "web") {
   try {

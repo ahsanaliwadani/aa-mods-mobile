@@ -77,6 +77,8 @@ export default function AppDetailScreen() {
   const dlSheet = useDownloadSheet();
 
   const [showFullChangelog, setShowFullChangelog] = useState(false);
+  type DetailTab = "info" | "changelog" | "features";
+  const [activeTab, setActiveTab] = useState<DetailTab>("info");
   const { show: showInterstitial } = useInterstitialAd();
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
@@ -208,6 +210,15 @@ export default function AppDetailScreen() {
   const longDescription = detail?.longDescription;
   const seeMoreMods = detail?.seeMoreMods;
   const fileSize = detail?.fileSize;
+  const computedSize = (() => {
+    if (fileSize) return fileSize;
+    const bt = activeEntry?.bytesTotal ?? 0;
+    if (bt > 0) {
+      if (bt < 1024 * 1024) return `${(bt / 1024).toFixed(0)} KB`;
+      return `${(bt / 1024 / 1024).toFixed(1)} MB`;
+    }
+    return null;
+  })();
   const androidReq = detail?.androidRequirement;
   const permissions = detail?.permissions;
   const features = detail?.features;
@@ -335,8 +346,8 @@ export default function AppDetailScreen() {
             <StatCard label="VERSION" value={app.version} colors={colors} />
             <StatCard label="BASE" value={app.baseVersion} colors={colors} />
             <StatCard label="DOWNLOADS" value={app.downloads} colors={colors} />
-            {fileSize ? (
-              <StatCard label="SIZE" value={fileSize} colors={colors} />
+            {computedSize ? (
+              <StatCard label="SIZE" value={computedSize} colors={colors} />
             ) : (
               <StatCard label="UPDATED" value={app.updateDate.display || app.updateDate.iso} colors={colors} />
             )}
@@ -371,115 +382,188 @@ export default function AppDetailScreen() {
           </View>
         )}
 
-        {/* Note / Warning */}
-        {note && (
-          <View style={[styles.section, { backgroundColor: "rgba(251,191,36,0.06)", borderColor: "rgba(251,191,36,0.25)" }]}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="alert-circle-outline" size={16} color="#fbbf24" />
-              <Text style={[styles.sectionTitle, { color: "#fbbf24" }]}>IMPORTANT NOTE</Text>
-            </View>
-            <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>{note}</Text>
-          </View>
-        )}
-
-        {/* What's New */}
-        {whatsNew && whatsNew.length > 0 && (
-          <SectionBlock icon="sparkles-outline" title="WHAT'S NEW" color={colors.primary} bgColor="rgba(0,230,115,0.05)" borderColor="rgba(0,230,115,0.2)">
-            {whatsNew.map((item, i) => (
-              <View key={i} style={styles.listItem}>
-                <View style={[styles.listDot, { backgroundColor: colors.primary }]} />
-                <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
-              </View>
-            ))}
-          </SectionBlock>
-        )}
-
-        {/* About / Long Description */}
-        <SectionBlock
-          icon="document-text-outline"
-          title={longDescription ? "ABOUT THIS MOD" : "DESCRIPTION"}
-          color={colors.accent}
-          bgColor={colors.card}
-          borderColor={colors.border}
-        >
-          {detailLoading && !longDescription ? (
-            <View style={{ gap: 6 }}>
-              {[1, 2, 3].map((i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.shimmerLine,
-                    { backgroundColor: colors.border, width: i === 3 ? "60%" : "100%" },
-                  ]}
-                />
-              ))}
-            </View>
-          ) : (
-            <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>
-              {longDescription || app.shortDescription || "No description available."}
-            </Text>
-          )}
-        </SectionBlock>
-
-        {/* Meta chips */}
-        <View style={[styles.metaRow, { gap: 10 }]}>
-          <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
-            <Ionicons name="layers-outline" size={16} color={colors.accent} />
-            <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Category</Text>
-            <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.category}</Text>
-          </View>
-          <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
-            <Ionicons name="person-outline" size={16} color={colors.accent} />
-            <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Developer</Text>
-            <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.developer}</Text>
-          </View>
-        </View>
-
-        {androidReq && (
-          <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Ionicons name="phone-portrait-outline" size={16} color={colors.accent} />
-            <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Min Android</Text>
-            <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{androidReq}</Text>
-          </View>
-        )}
-
-        {/* Changelog */}
-        {changelog && changelog.length > 0 && (
-          <SectionBlock icon="list-outline" title="CHANGELOG" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
-            {(changelogToShow ?? []).map((item, i) => (
-              <View key={i} style={styles.listItem}>
-                <Text style={[styles.changeIndex, { color: colors.mutedForeground }]}>{i + 1}.</Text>
-                <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
-              </View>
-            ))}
-            {changelog.length > 4 && (
+        {/* ── Content Tab Bar — only when changelog or features exist ── */}
+        {(changelog?.length || features?.length) ? (
+          <View style={[styles.tabBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            {(["info", ...(changelog?.length ? ["changelog"] : []), ...(features?.length ? ["features"] : [])] as DetailTab[]).map((tab) => (
               <Pressable
-                onPress={() => {
-                  const next = !showFullChangelog;
-                  setShowFullChangelog(next);
-                  if (next) logChangelogExpanded(slug ?? "", app.name);
-                }}
-                style={[styles.showMoreBtn, { borderColor: colors.border }]}
+                key={tab}
+                onPress={() => { haptics.selection(); setActiveTab(tab); }}
+                style={[styles.tabItem, activeTab === tab && { borderBottomColor: colors.primary }]}
               >
-                <Text style={[styles.showMoreText, { color: colors.accent }]}>
-                  {showFullChangelog ? "Show less" : `Show ${changelog.length - 4} more`}
+                <Text style={[styles.tabLabel, { color: activeTab === tab ? colors.primary : colors.mutedForeground }]}>
+                  {tab === "info" ? "Info" : tab === "changelog" ? "Changelog" : "Features"}
                 </Text>
-                <Ionicons name={showFullChangelog ? "chevron-up" : "chevron-down"} size={14} color={colors.accent} />
+                {tab === "changelog" && changelog?.length ? (
+                  <View style={[styles.tabBadge, { backgroundColor: activeTab === tab ? "rgba(0,230,115,0.15)" : colors.secondary }]}>
+                    <Text style={[styles.tabBadgeText, { color: activeTab === tab ? colors.primary : colors.mutedForeground }]}>{changelog.length}</Text>
+                  </View>
+                ) : null}
+                {tab === "features" && features?.length ? (
+                  <View style={[styles.tabBadge, { backgroundColor: activeTab === tab ? "rgba(0,230,115,0.15)" : colors.secondary }]}>
+                    <Text style={[styles.tabBadgeText, { color: activeTab === tab ? colors.primary : colors.mutedForeground }]}>{features.length}</Text>
+                  </View>
+                ) : null}
               </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        {/* ── INFO TAB ── */}
+        {activeTab === "info" && (
+          <>
+            {note && (
+              <View style={[styles.section, { backgroundColor: "rgba(251,191,36,0.06)", borderColor: "rgba(251,191,36,0.25)" }]}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="alert-circle-outline" size={16} color="#fbbf24" />
+                  <Text style={[styles.sectionTitle, { color: "#fbbf24" }]}>IMPORTANT NOTE</Text>
+                </View>
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>{note}</Text>
+              </View>
             )}
-          </SectionBlock>
+
+            {whatsNew && whatsNew.length > 0 && (
+              <SectionBlock icon="sparkles-outline" title="WHAT'S NEW" color={colors.primary} bgColor="rgba(0,230,115,0.05)" borderColor="rgba(0,230,115,0.2)">
+                {whatsNew.map((item, i) => (
+                  <View key={i} style={styles.listItem}>
+                    <View style={[styles.listDot, { backgroundColor: colors.primary }]} />
+                    <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
+                  </View>
+                ))}
+              </SectionBlock>
+            )}
+
+            <SectionBlock
+              icon="document-text-outline"
+              title={longDescription ? "ABOUT THIS MOD" : "DESCRIPTION"}
+              color={colors.accent}
+              bgColor={colors.card}
+              borderColor={colors.border}
+            >
+              {detailLoading && !longDescription ? (
+                <View style={{ gap: 6 }}>
+                  {[1, 2, 3].map((i) => (
+                    <View key={i} style={[styles.shimmerLine, { backgroundColor: colors.border, width: i === 3 ? "60%" : "100%" }]} />
+                  ))}
+                </View>
+              ) : (
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>
+                  {longDescription || app.shortDescription || "No description available."}
+                </Text>
+              )}
+            </SectionBlock>
+
+            <View style={[styles.metaRow, { gap: 10 }]}>
+              <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
+                <Ionicons name="layers-outline" size={16} color={colors.accent} />
+                <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Category</Text>
+                <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.category}</Text>
+              </View>
+              <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
+                <Ionicons name="person-outline" size={16} color={colors.accent} />
+                <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Developer</Text>
+                <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.developer}</Text>
+              </View>
+            </View>
+
+            {androidReq && (
+              <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Ionicons name="phone-portrait-outline" size={16} color={colors.accent} />
+                <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Min Android</Text>
+                <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{androidReq}</Text>
+              </View>
+            )}
+
+            {permissions && permissions.length > 0 && (
+              <SectionBlock icon="shield-outline" title="PERMISSIONS REQUIRED" color="#f59e0b" bgColor="rgba(245,158,11,0.04)" borderColor="rgba(245,158,11,0.2)">
+                {permissions.map((item, i) => (
+                  <View key={i} style={styles.listItem}>
+                    <Ionicons name="lock-closed-outline" size={13} color="#f59e0b" style={{ marginTop: 5, flexShrink: 0 }} />
+                    <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
+                  </View>
+                ))}
+              </SectionBlock>
+            )}
+
+            {(detail?.telegramGroup || detail?.supportEmail) && (
+              <SectionBlock icon="headset-outline" title="SUPPORT" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+                {detail.telegramGroup && (
+                  <Pressable onPress={() => Linking.openURL(detail.telegramGroup!)} style={[styles.supportRow, { borderColor: colors.border }]}>
+                    <MaterialCommunityIcons name="send" size={16} color="#2AABEE" />
+                    <Text style={[styles.supportText, { color: colors.foreground }]}>Telegram Support Group</Text>
+                    <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
+                  </Pressable>
+                )}
+                {detail.supportEmail && (
+                  <Pressable onPress={() => Linking.openURL(`mailto:${detail.supportEmail}`)} style={[styles.supportRow, { borderColor: colors.border }]}>
+                    <Ionicons name="mail-outline" size={16} color={colors.accent} />
+                    <Text style={[styles.supportText, { color: colors.foreground }]}>{detail.supportEmail}</Text>
+                    <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
+                  </Pressable>
+                )}
+              </SectionBlock>
+            )}
+          </>
         )}
 
-        {/* Features */}
-        {features && features.length > 0 && (
-          <SectionBlock icon="sparkles-outline" title="MOD FEATURES" color={colors.primary} bgColor="rgba(0,230,115,0.04)" borderColor="rgba(0,230,115,0.18)">
-            {features.map((item, i) => (
-              <View key={i} style={styles.listItem}>
-                <Ionicons name="checkmark-circle" size={14} color={colors.primary} style={{ marginTop: 4, flexShrink: 0 }} />
-                <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
+        {/* ── CHANGELOG TAB ── */}
+        {activeTab === "changelog" && (
+          <>
+            {changelog && changelog.length > 0 ? (
+              <SectionBlock icon="list-outline" title="CHANGELOG" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+                {changelog.map((item, i) => (
+                  <View key={i} style={styles.listItem}>
+                    <Text style={[styles.changeIndex, { color: colors.mutedForeground }]}>{i + 1}.</Text>
+                    <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
+                  </View>
+                ))}
+              </SectionBlock>
+            ) : (
+              <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border, alignItems: "center", paddingVertical: 32 }]}>
+                <Ionicons name="document-text-outline" size={32} color={colors.mutedForeground} style={{ opacity: 0.4 }} />
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground, marginTop: 8 }]}>No changelog available</Text>
               </View>
-            ))}
-          </SectionBlock>
+            )}
+          </>
+        )}
+
+        {/* ── FEATURES TAB ── */}
+        {activeTab === "features" && (
+          <>
+            {features && features.length > 0 ? (
+              <SectionBlock icon="sparkles-outline" title="MOD FEATURES" color={colors.primary} bgColor="rgba(0,230,115,0.04)" borderColor="rgba(0,230,115,0.18)">
+                {features.map((item, i) => (
+                  <View key={i} style={styles.listItem}>
+                    <Ionicons name="checkmark-circle" size={14} color={colors.primary} style={{ marginTop: 4, flexShrink: 0 }} />
+                    <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
+                  </View>
+                ))}
+              </SectionBlock>
+            ) : (
+              <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border, alignItems: "center", paddingVertical: 32 }]}>
+                <Ionicons name="sparkles-outline" size={32} color={colors.mutedForeground} style={{ opacity: 0.4 }} />
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground, marginTop: 8 }]}>No MOD features listed</Text>
+              </View>
+            )}
+
+            {seeMoreMods && seeMoreMods.length > 0 && (
+              <SectionBlock icon="apps-outline" title="SEE MORE MODS" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  {seeMoreMods.map((m) => (
+                    <Pressable
+                      key={m.slug}
+                      onPress={() => { haptics.selection(); logSeeMoreModsPress(slug ?? "", m.slug); router.push(`/app/${m.slug}`); }}
+                      style={({ pressed }) => [styles.seeMoreRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                    >
+                      <Ionicons name="cube-outline" size={16} color={colors.primary} />
+                      <Text style={[styles.seeMoreText, { color: colors.foreground }]}>{m.label}</Text>
+                      <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
+                    </Pressable>
+                  ))}
+                </View>
+              </SectionBlock>
+            )}
+          </>
         )}
 
         {/* Downloads */}
@@ -625,66 +709,6 @@ export default function AppDetailScreen() {
           )}
         </View>
 
-        {/* Permissions */}
-        {permissions && permissions.length > 0 && (
-          <SectionBlock icon="shield-outline" title="PERMISSIONS REQUIRED" color="#f59e0b" bgColor="rgba(245,158,11,0.04)" borderColor="rgba(245,158,11,0.2)">
-            {permissions.map((item, i) => (
-              <View key={i} style={styles.listItem}>
-                <Ionicons name="lock-closed-outline" size={13} color="#f59e0b" style={{ marginTop: 5, flexShrink: 0 }} />
-                <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
-              </View>
-            ))}
-          </SectionBlock>
-        )}
-
-        {/* Support */}
-        {(detail?.telegramGroup || detail?.supportEmail) && (
-          <SectionBlock icon="headset-outline" title="SUPPORT" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
-            {detail.telegramGroup && (
-              <Pressable
-                onPress={() => Linking.openURL(detail.telegramGroup!)}
-                style={[styles.supportRow, { borderColor: colors.border }]}
-              >
-                <MaterialCommunityIcons name="send" size={16} color="#2AABEE" />
-                <Text style={[styles.supportText, { color: colors.foreground }]}>Telegram Support Group</Text>
-                <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
-              </Pressable>
-            )}
-            {detail.supportEmail && (
-              <Pressable
-                onPress={() => Linking.openURL(`mailto:${detail.supportEmail}`)}
-                style={[styles.supportRow, { borderColor: colors.border }]}
-              >
-                <Ionicons name="mail-outline" size={16} color={colors.accent} />
-                <Text style={[styles.supportText, { color: colors.foreground }]}>{detail.supportEmail}</Text>
-                <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
-              </Pressable>
-            )}
-          </SectionBlock>
-        )}
-
-        {/* See More Mods */}
-        {seeMoreMods && seeMoreMods.length > 0 && (
-          <SectionBlock icon="apps-outline" title="SEE MORE MODS" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
-            <View style={{ gap: 8, marginTop: 4 }}>
-              {seeMoreMods.map((m) => (
-                <Pressable
-                  key={m.slug}
-                  onPress={() => {
-                    haptics.selection();
-                    logSeeMoreModsPress(slug ?? "", m.slug);
-                    router.push(`/app/${m.slug}`);
-                  }}
-                  style={({ pressed }) => [styles.seeMoreRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-                >
-                  <Ionicons name="cube-outline" size={16} color={colors.primary} />
-                  <Text style={[styles.seeMoreText, { color: colors.foreground }]}>{m.label}</Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
-                </Pressable>
-              ))}
-            </View>
-          </SectionBlock>
-        )}
       </ScrollView>
 
       <DownloadSheet
@@ -803,4 +827,18 @@ const styles = StyleSheet.create({
   notFoundSubtitle: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center" },
   notFoundBtn: { borderRadius: 14, paddingVertical: 13, paddingHorizontal: 28, marginTop: 8 },
   notFoundBtnText: { fontSize: 15, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  tabBar: { flexDirection: "row", borderRadius: 14, borderWidth: 1, overflow: "hidden" },
+  tabItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 5,
+    paddingVertical: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  tabLabel: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  tabBadge: { borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
+  tabBadgeText: { fontSize: 10, fontWeight: "700", fontFamily: "Inter_700Bold" },
 });

@@ -30,6 +30,10 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }): void {
+    try {
+      const { recordError } = require("@/lib/crashlytics");
+      recordError(error, `ErrorBoundary: ${info.componentStack.slice(0, 500)}`);
+    } catch {}
     if (typeof this.props.onError === "function") {
       this.props.onError(error, info.componentStack);
     }
