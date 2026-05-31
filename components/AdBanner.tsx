@@ -1,6 +1,6 @@
 import React from "react";
 import { Platform, View, StyleSheet } from "react-native";
-import { AD_UNITS } from "@/lib/admob";
+import { getAdUnitId } from "@/lib/admob";
 
 type BannerVariant = "banner1" | "banner2";
 
@@ -10,8 +10,8 @@ interface AdBannerProps {
 }
 
 const UNIT_MAP: Record<BannerVariant, string> = {
-  banner1: AD_UNITS.BANNER_1,
-  banner2: AD_UNITS.BANNER_2,
+  banner1: getAdUnitId("BANNER_1"),
+  banner2: getAdUnitId("BANNER_2"),
 };
 
 let BannerAd: React.ComponentType<{

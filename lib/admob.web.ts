@@ -9,4 +9,6 @@ export const AD_UNITS = {
 } as const;
 export const REWARDED_ITEM = { type: "download_booster", amount: 1 };
 export function initializeAdMob(): void {}
+export function waitForAdMob(): Promise<void> { return Promise.resolve(); }
 export function isAdMobAvailable(): boolean { return false; }
+export function getAdUnitId(_key: string): string { return ""; }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AppState, Platform } from "react-native";
 import type { AppStateStatus } from "react-native";
-import { AD_UNITS } from "@/lib/admob";
+import { getAdUnitId, waitForAdMob } from "@/lib/admob";
 
 export function useAppOpenAd() {
   const adRef = useRef<{
@@ -13,43 +13,64 @@ export function useAppOpenAd() {
   const listenersRef = useRef<Array<{ remove: () => void }>>([]);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const shownOnceRef = useRef(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     if (Platform.OS !== "android") return;
 
     const load = () => {
-      try {
-        const { AppOpenAd, AdEventType } = require("react-native-google-mobile-ads");
-        for (const l of listenersRef.current) l.remove();
-        listenersRef.current = [];
+      if (!mountedRef.current) return;
+      waitForAdMob().then(() => {
+        if (!mountedRef.current) return;
+        try {
+          const mod = require("react-native-google-mobile-ads");
+          if (!mod?.AppOpenAd || !mod?.AdEventType) return;
+          const { AppOpenAd, AdEventType } = mod;
 
-        const ad = AppOpenAd.createForAdRequest(AD_UNITS.APP_OPEN, {
-          requestNonPersonalizedAdsOnly: false,
-        });
-        adRef.current = ad;
-        listenersRef.current.push(
-          ad.addAdEventListener(AdEventType.LOADED, () => {
-            if (!shownOnceRef.current) {
-              shownOnceRef.current = true;
-              ad.show().catch(() => {});
-            }
-          }),
-          ad.addAdEventListener(AdEventType.CLOSED, () => {
-            shownOnceRef.current = false;
-            load();
-          }),
-          ad.addAdEventListener(AdEventType.ERROR, () => {
-            setTimeout(load, 30_000);
-          }),
-        );
-        ad.load();
-      } catch {}
+          for (const l of listenersRef.current) {
+            try { l.remove(); } catch {}
+          }
+          listenersRef.current = [];
+          adRef.current = null;
+
+          const ad = AppOpenAd.createForAdRequest(getAdUnitId("APP_OPEN"), {
+            requestNonPersonalizedAdsOnly: false,
+          });
+          adRef.current = ad;
+          listenersRef.current.push(
+            ad.addAdEventListener(AdEventType.LOADED, () => {
+              if (!mountedRef.current) return;
+              if (!shownOnceRef.current) {
+                shownOnceRef.current = true;
+                ad.show().catch(() => {});
+              }
+            }),
+            ad.addAdEventListener(AdEventType.CLOSED, () => {
+              if (!mountedRef.current) return;
+              shownOnceRef.current = false;
+              adRef.current = null;
+              load();
+            }),
+            ad.addAdEventListener(AdEventType.ERROR, () => {
+              if (!mountedRef.current) return;
+              adRef.current = null;
+              setTimeout(load, 30_000);
+            }),
+          );
+          ad.load();
+        } catch {}
+      }).catch(() => {});
     };
 
     load();
 
     const sub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
-      if (appStateRef.current.match(/inactive|background/) && nextState === "active") {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextState === "active" &&
+        mountedRef.current
+      ) {
         if (adRef.current?.loaded && !shownOnceRef.current) {
           shownOnceRef.current = true;
           adRef.current.show().catch(() => {});
@@ -59,8 +80,13 @@ export function useAppOpenAd() {
     });
 
     return () => {
+      mountedRef.current = false;
       sub.remove();
-      for (const l of listenersRef.current) l.remove();
+      for (const l of listenersRef.current) {
+        try { l.remove(); } catch {}
+      }
+      listenersRef.current = [];
+      adRef.current = null;
     };
   }, []);
 }

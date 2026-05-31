@@ -13,21 +13,48 @@ export const AD_UNITS = {
 
 export const REWARDED_ITEM = { type: "download_booster", amount: 1 };
 
-let _initialized = false;
+let _initPromise: Promise<void> | null = null;
 
 export function initializeAdMob(): void {
-  if (Platform.OS === "web" || _initialized) return;
-  try {
-    const MobileAds = require("react-native-google-mobile-ads").default;
-    MobileAds()
-      .initialize()
-      .then(() => {
-        _initialized = true;
-      })
-      .catch(() => {});
-  } catch {}
+  if (Platform.OS !== "android") return;
+  if (_initPromise) return;
+  _initPromise = new Promise<void>((resolve) => {
+    try {
+      const mod = require("react-native-google-mobile-ads");
+      const MobileAds = mod?.default ?? mod?.MobileAds;
+      if (!MobileAds) { resolve(); return; }
+      MobileAds()
+        .initialize()
+        .then(() => resolve())
+        .catch(() => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
+export function waitForAdMob(): Promise<void> {
+  return _initPromise ?? Promise.resolve();
 }
 
 export function isAdMobAvailable(): boolean {
   return Platform.OS === "android";
+}
+
+export function getAdUnitId(key: keyof typeof AD_UNITS): string {
+  if (__DEV__) {
+    try {
+      const { TestIds } = require("react-native-google-mobile-ads");
+      const map: Partial<Record<keyof typeof AD_UNITS, string>> = {
+        BANNER_1: TestIds.BANNER,
+        BANNER_2: TestIds.BANNER,
+        INTERSTITIAL: TestIds.INTERSTITIAL,
+        REWARDED: TestIds.REWARDED,
+        APP_OPEN: TestIds.APP_OPEN,
+        NATIVE_ADVANCED: TestIds.ADAPTIVE_BANNER,
+      };
+      if (map[key]) return map[key]!;
+    } catch {}
+  }
+  return AD_UNITS[key];
 }

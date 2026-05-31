@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AD_UNITS } from "@/lib/admob";
+import { getAdUnitId, waitForAdMob } from "@/lib/admob";
 
 type AdState = "loading" | "loaded" | "showing" | "closed" | "error";
 
@@ -28,32 +28,55 @@ export function useInterstitialAd() {
   } | null>(null);
   const [state, setState] = useState<AdState>("loading");
   const listenersRef = useRef<Array<{ remove: () => void }>>([]);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const cleanup = useCallback(() => {
-    for (const l of listenersRef.current) l.remove();
+    for (const l of listenersRef.current) {
+      try { l.remove(); } catch {}
+    }
     listenersRef.current = [];
+    adRef.current = null;
   }, []);
 
   const load = useCallback(() => {
     if (Platform.OS !== "android") return;
-    try {
-      const { InterstitialAd, AdEventType } = require("react-native-google-mobile-ads");
-      cleanup();
-      const ad = InterstitialAd.createForAdRequest(AD_UNITS.INTERSTITIAL, {
-        requestNonPersonalizedAdsOnly: false,
-      });
-      adRef.current = ad;
-      listenersRef.current.push(
-        ad.addAdEventListener(AdEventType.LOADED, () => setState("loaded")),
-        ad.addAdEventListener(AdEventType.CLOSED, () => {
-          setState("closed");
-          setTimeout(() => { setState("loading"); load(); }, 500);
-        }),
-        ad.addAdEventListener(AdEventType.ERROR, () => setState("error")),
-      );
-      ad.load();
-      setState("loading");
-    } catch {}
+    waitForAdMob().then(() => {
+      if (!mountedRef.current) return;
+      try {
+        const mod = require("react-native-google-mobile-ads");
+        if (!mod?.InterstitialAd || !mod?.AdEventType) return;
+        const { InterstitialAd, AdEventType } = mod;
+        cleanup();
+        const ad = InterstitialAd.createForAdRequest(getAdUnitId("INTERSTITIAL"), {
+          requestNonPersonalizedAdsOnly: false,
+        });
+        adRef.current = ad;
+        listenersRef.current.push(
+          ad.addAdEventListener(AdEventType.LOADED, () => {
+            if (mountedRef.current) setState("loaded");
+          }),
+          ad.addAdEventListener(AdEventType.CLOSED, () => {
+            if (!mountedRef.current) return;
+            setState("closed");
+            setTimeout(() => {
+              if (!mountedRef.current) return;
+              setState("loading");
+              load();
+            }, 500);
+          }),
+          ad.addAdEventListener(AdEventType.ERROR, () => {
+            if (mountedRef.current) setState("error");
+          }),
+        );
+        ad.load();
+        if (mountedRef.current) setState("loading");
+      } catch {}
+    }).catch(() => {});
   }, [cleanup]);
 
   useEffect(() => {
@@ -65,12 +88,13 @@ export function useInterstitialAd() {
     if (state !== "loaded" || !adRef.current) return false;
     const allowed = await shouldShowAd();
     if (!allowed) return false;
+    if (!mountedRef.current || !adRef.current) return false;
     try {
-      setState("showing");
+      if (mountedRef.current) setState("showing");
       await adRef.current.show();
       return true;
     } catch {
-      setState("error");
+      if (mountedRef.current) setState("error");
       return false;
     }
   }, [state]);
