@@ -486,14 +486,38 @@ export default function AppDetailScreen() {
               </SectionBlock>
             )}
 
-            {appFacts && appFacts.length > 0 && (
+            {appFacts && (
               <SectionBlock icon="information-circle-outline" title="APP FACTS" color="#a78bfa" bgColor="rgba(167,139,250,0.05)" borderColor="rgba(167,139,250,0.2)">
-                {appFacts.map((fact, i) => (
-                  <View key={i} style={styles.listItem}>
-                    <Ionicons name="chevron-forward-circle-outline" size={14} color="#a78bfa" style={{ marginTop: 4, flexShrink: 0 }} />
-                    <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{fact}</Text>
+                {appFacts.architecture && (
+                  <View style={styles.factRow}>
+                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Architecture</Text>
+                    <Text style={[styles.factValue, { color: colors.foreground }]}>{appFacts.architecture}</Text>
                   </View>
-                ))}
+                )}
+                {appFacts.contentRating && (
+                  <View style={styles.factRow}>
+                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Content Rating</Text>
+                    <Text style={[styles.factValue, { color: colors.foreground }]}>{appFacts.contentRating}</Text>
+                  </View>
+                )}
+                {appFacts.requirement && (
+                  <View style={styles.factRow}>
+                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Requirement</Text>
+                    <Text style={[styles.factValue, { color: colors.foreground }]}>{appFacts.requirement}</Text>
+                  </View>
+                )}
+                {appFacts.safetySummary && (
+                  <View style={[styles.factRow, { flexDirection: "column", alignItems: "flex-start", gap: 4 }]}>
+                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Safety</Text>
+                    <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>{appFacts.safetySummary}</Text>
+                  </View>
+                )}
+                {appFacts.supportSummary && (
+                  <View style={[styles.factRow, { flexDirection: "column", alignItems: "flex-start", gap: 4 }]}>
+                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Best For</Text>
+                    <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>{appFacts.supportSummary}</Text>
+                  </View>
+                )}
               </SectionBlock>
             )}
 
@@ -850,6 +874,9 @@ const styles = StyleSheet.create({
   supportText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
   seeMoreRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderTopWidth: 1, marginTop: 4 },
   seeMoreText: { flex: 1, fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  factRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 7, borderTopWidth: 1, borderTopColor: "rgba(167,139,250,0.12)", marginTop: 2 },
+  factLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 0.8, fontFamily: "Inter_700Bold" },
+  factValue: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold", textAlign: "right", flex: 1, marginLeft: 12 },
   shimmerLine: { height: 12, borderRadius: 6, marginBottom: 6 },
   notFoundContainer: { flex: 1 },
   notFoundContent: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
