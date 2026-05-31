@@ -6,6 +6,8 @@ import * as FileSystem from "expo-file-system/legacy";
 import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState, useCallback } from "react";
+import { ref, get } from "firebase/database";
+import { database } from "@/lib/firebase";
 import {
   Alert,
   Platform,
@@ -366,6 +368,17 @@ export default function SettingsScreen() {
   const activeCount = Array.from(dm.downloads.values()).filter((e) => e.phase === "downloading" || e.phase === "resolving").length;
   const completedCount = Array.from(dm.downloads.values()).filter((e) => e.phase === "done" || e.phase === "installed" || e.phase === "error").length;
 
+  const [helplineBotUrl, setHelplineBotUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    get(ref(database, "app_content/aaHelplineBotUrl"))
+      .then((snap) => {
+        const val = snap.val();
+        if (typeof val === "string" && val.trim().length > 0) setHelplineBotUrl(val.trim());
+      })
+      .catch(() => {});
+  }, []);
+
   const [pickingDir, setPickingDir] = useState(false);
 
   const downloadDirLabel = (() => {
@@ -720,6 +733,15 @@ export default function SettingsScreen() {
           ) : null}
           {config.supportEmail ? (
             <SettingRow icon="mail-outline" label="Contact Support" sub={config.supportEmail} onPress={() => { logExternalLinkOpened("support"); Linking.openURL(`mailto:${config.supportEmail}`).catch(() => {}); }} />
+          ) : null}
+          {helplineBotUrl ? (
+            <SettingRow
+              icon="chatbubble-ellipses-outline"
+              iconColor="#2AABEE"
+              label="AA Helpline Bot"
+              sub={prettyUrl(helplineBotUrl)}
+              onPress={() => { logExternalLinkOpened("helpline_bot"); openUrl(helplineBotUrl); }}
+            />
           ) : null}
         </View>
       </View>
