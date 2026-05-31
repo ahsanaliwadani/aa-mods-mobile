@@ -7,7 +7,7 @@ import { startTrace } from "@/lib/firebasePerformance";
 import { getNetworkStatus } from "@/lib/networkUtils";
 
 const BASE_ICON_URL = "https://aa-mods.vercel.app";
-const LOAD_TIMEOUT_MS = 8000;
+const LOAD_TIMEOUT_MS = 12000;
 
 type DownloadButton = {
   label: string;
