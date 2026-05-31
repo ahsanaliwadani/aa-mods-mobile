@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ref, onValue, type DataSnapshot } from "firebase/database";
+import { ref, onValue, get, type DataSnapshot } from "firebase/database";
 import { database } from "@/lib/firebase";
 
 export type DownloadLink = {
@@ -28,12 +28,60 @@ export type AppDetailExtra = {
   screenshots?: string[];
   permissions?: string[];
   features?: string[];
+  appFacts?: string[];
 };
 
 function safeStringArray(val: unknown): string[] | undefined {
   try {
-    if (!Array.isArray(val)) return undefined;
-    const filtered = val.filter((v) => typeof v === "string");
+    if (Array.isArray(val)) {
+      const filtered = val.filter((v) => typeof v === "string");
+      return filtered.length > 0 ? filtered : undefined;
+    }
+    // Firebase RTDB stores arrays as objects with numeric keys: {"0": "...", "1": "..."}
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      const obj = val as Record<string, unknown>;
+      const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b));
+      const filtered = keys.map((k) => obj[k]).filter((v) => typeof v === "string") as string[];
+      return filtered.length > 0 ? filtered : undefined;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeSeeMoreMods(val: unknown): SeeMoreMod[] | undefined {
+  try {
+    let items: unknown[] = [];
+    if (Array.isArray(val)) {
+      items = val;
+    } else if (val && typeof val === "object" && !Array.isArray(val)) {
+      const obj = val as Record<string, unknown>;
+      const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b));
+      items = keys.map((k) => obj[k]);
+    }
+    const filtered = items.filter(
+      (m): m is SeeMoreMod => !!m && typeof (m as SeeMoreMod).slug === "string"
+    );
+    return filtered.length > 0 ? filtered : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeMirrorLinks(val: unknown): DownloadLink[] | undefined {
+  try {
+    let items: unknown[] = [];
+    if (Array.isArray(val)) {
+      items = val;
+    } else if (val && typeof val === "object" && !Array.isArray(val)) {
+      const obj = val as Record<string, unknown>;
+      const keys = Object.keys(obj).sort((a, b) => Number(a) - Number(b));
+      items = keys.map((k) => obj[k]);
+    }
+    const filtered = items.filter(
+      (l): l is DownloadLink => !!l && typeof (l as DownloadLink).link === "string"
+    );
     return filtered.length > 0 ? filtered : undefined;
   } catch {
     return undefined;
@@ -73,19 +121,8 @@ export function useFirebaseAppDetail(slug: string) {
               return;
             }
 
-            const mirrorLinks = Array.isArray(raw.mirrorLinks)
-              ? (raw.mirrorLinks as DownloadLink[]).filter(
-                  (l) => l && typeof l.link === "string",
-                )
-              : undefined;
-
-            const seeMoreMods = Array.isArray(raw.seeMoreMods)
-              ? (raw.seeMoreMods as SeeMoreMod[]).filter(
-                  (m) => m && typeof m.slug === "string",
-                )
-              : undefined;
-
-            setDetail({
+            setDetail((prev) => ({
+              ...prev,
               changelog: safeStringArray(raw.changelog),
               whatsNew: safeStringArray(raw.whatsNew),
               note: typeof raw.note === "string" ? raw.note : undefined,
@@ -97,8 +134,8 @@ export function useFirebaseAppDetail(slug: string) {
                     : undefined,
               blogMarkdown:
                 typeof raw.blogMarkdown === "string" ? raw.blogMarkdown : undefined,
-              mirrorLinks: mirrorLinks?.length ? mirrorLinks : undefined,
-              seeMoreMods: seeMoreMods?.length ? seeMoreMods : undefined,
+              mirrorLinks: safeMirrorLinks(raw.mirrorLinks),
+              seeMoreMods: safeSeeMoreMods(raw.seeMoreMods),
               supportEmail:
                 typeof raw.supportEmail === "string" ? raw.supportEmail : undefined,
               telegramGroup:
@@ -120,7 +157,7 @@ export function useFirebaseAppDetail(slug: string) {
               screenshots: safeStringArray(raw.screenshots),
               permissions: safeStringArray(raw.permissions),
               features: safeStringArray(raw.features),
-            });
+            }));
 
             setLoading(false);
             setConnected(true);
@@ -146,6 +183,25 @@ export function useFirebaseAppDetail(slug: string) {
         setConnected(false);
       }
     }
+
+    // Fetch appFacts separately from appFactsBySlug
+    const fetchAppFacts = async () => {
+      if (!isMounted.current) return;
+      try {
+        const factsRef = ref(database, `app_content/appFactsBySlug/${slug}`);
+        const snapshot = await get(factsRef);
+        if (!isMounted.current) return;
+        const raw = snapshot.val();
+        if (raw) {
+          const facts = safeStringArray(raw);
+          if (facts) {
+            setDetail((prev) => prev ? { ...prev, appFacts: facts } : { appFacts: facts });
+          }
+        }
+      } catch {}
+    };
+
+    fetchAppFacts();
 
     return () => {
       isMounted.current = false;

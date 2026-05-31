@@ -481,45 +481,38 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         logWifiOnlyBypassed(slug, appName);
       }
 
-      // ── Download folder setup (Android only, shown once) ───────────────
-      if (Platform.OS === "android" && FileSystem) {
-        const alreadyPrompted = await AsyncStorage.getItem(FOLDER_PROMPTED_KEY).catch(() => null);
-        if (!alreadyPrompted) {
-          await AsyncStorage.setItem(FOLDER_PROMPTED_KEY, "true").catch(() => {});
-          const choice = await new Promise<"pick" | "default" | "cancel">((resolve) => {
-            Alert.alert(
-              "Set Download Folder",
-              "Where would you like to save downloaded APK files?\n\nYou can change this later in Settings.",
-              [
-                {
-                  text: "Pick Folder",
-                  onPress: () => resolve("pick"),
-                },
-                {
-                  text: "Use Internal Storage",
-                  style: "default",
-                  onPress: () => resolve("default"),
-                },
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                  onPress: () => resolve("cancel"),
-                },
-              ],
-              { cancelable: true, onDismiss: () => resolve("cancel") },
-            );
-          });
+      // ── Download folder setup (Android only, prompt if no folder set) ───
+      if (Platform.OS === "android" && FileSystem && !downloadDirUriRef.current) {
+        const choice = await new Promise<"pick" | "default" | "cancel">((resolve) => {
+          Alert.alert(
+            "Save APK To Phone Storage?",
+            "Choose where to save downloaded APK files so you can access them from your file manager.\n\nYou can change this later in Settings.",
+            [
+              {
+                text: "Pick Folder",
+                onPress: () => resolve("pick"),
+              },
+              {
+                text: "App Storage Only",
+                style: "default",
+                onPress: () => resolve("default"),
+              },
+              {
+                text: "Cancel Download",
+                style: "cancel",
+                onPress: () => resolve("cancel"),
+              },
+            ],
+            { cancelable: true, onDismiss: () => resolve("cancel") },
+          );
+        });
 
-          if (choice === "cancel") return;
+        if (choice === "cancel") return;
 
-          if (choice === "pick") {
-            const picked = await pickDownloadDir().catch(() => null);
-            if (!picked) {
-              // User dismissed the picker — use internal storage silently
-            }
-          }
-          // "default" or picker dismissed → just use internal AAMods dir (handled below)
+        if (choice === "pick") {
+          await pickDownloadDir().catch(() => null);
         }
+        // "default" → use internal AAMods dir (handled below), no SAF folder set
       }
 
       const entry: DownloadEntry = {

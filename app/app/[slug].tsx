@@ -209,6 +209,7 @@ export default function AppDetailScreen() {
   const note = detail?.note;
   const longDescription = detail?.longDescription;
   const seeMoreMods = detail?.seeMoreMods;
+  const appFacts = detail?.appFacts;
   const fileSize = detail?.fileSize;
   const computedSize = (() => {
     if (fileSize) return fileSize;
@@ -482,6 +483,35 @@ export default function AppDetailScreen() {
                     <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
                   </View>
                 ))}
+              </SectionBlock>
+            )}
+
+            {appFacts && appFacts.length > 0 && (
+              <SectionBlock icon="information-circle-outline" title="APP FACTS" color="#a78bfa" bgColor="rgba(167,139,250,0.05)" borderColor="rgba(167,139,250,0.2)">
+                {appFacts.map((fact, i) => (
+                  <View key={i} style={styles.listItem}>
+                    <Ionicons name="chevron-forward-circle-outline" size={14} color="#a78bfa" style={{ marginTop: 4, flexShrink: 0 }} />
+                    <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{fact}</Text>
+                  </View>
+                ))}
+              </SectionBlock>
+            )}
+
+            {seeMoreMods && seeMoreMods.length > 0 && (
+              <SectionBlock icon="apps-outline" title="SEE MORE MODS" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  {seeMoreMods.map((m) => (
+                    <Pressable
+                      key={m.slug}
+                      onPress={() => { haptics.selection(); logSeeMoreModsPress(slug ?? "", m.slug); router.push(`/app/${m.slug}`); }}
+                      style={({ pressed }) => [styles.seeMoreRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                    >
+                      <Ionicons name="cube-outline" size={16} color={colors.primary} />
+                      <Text style={[styles.seeMoreText, { color: colors.foreground }]}>{m.label}</Text>
+                      <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
+                    </Pressable>
+                  ))}
+                </View>
               </SectionBlock>
             )}
 

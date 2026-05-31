@@ -104,6 +104,22 @@ function RootLayoutNav() {
   const { shouldShowRating, recordDownload, dismiss: dismissRating, markRated } = useAppRating(config);
   useAppOpenAd();
 
+  // Request Android storage + notification permissions on startup
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    try {
+      const { PermissionsAndroid } = require("react-native");
+      const perms: string[] = [
+        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+      ];
+      if (PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS) {
+        perms.push(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+      }
+      PermissionsAndroid.requestMultiple(perms).catch(() => {});
+    } catch {}
+  }, []);
+
   // Track download phase changes → always add to inbox (and also fire local push notification separately)
   useEffect(() => {
     const newPhases = new Map<string, string>();
