@@ -123,6 +123,15 @@ export default function AppDetailScreen() {
     if (app) logFavoriteToggle(slug, app.name, action);
   };
 
+  const handleReportProblem = () => {
+    const email = detail?.supportEmail || 'contact@aamods.com';
+    const subject = encodeURIComponent(`Report a Problem — ${app?.name ?? ''} v${app?.version ?? ''}`);
+    const body = encodeURIComponent(
+      `App: ${app?.name ?? ''}\nVersion: ${app?.version ?? ''}\nCategory: ${app?.category ?? ''}\n\n--- Describe your issue below ---\n\n`
+    );
+    Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`);
+  };
+
   const handleShare = async () => {
     try {
       haptics.light();
@@ -454,27 +463,6 @@ export default function AppDetailScreen() {
               )}
             </SectionBlock>
 
-            <View style={[styles.metaRow, { gap: 10 }]}>
-              <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
-                <Ionicons name="layers-outline" size={16} color={colors.accent} />
-                <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Category</Text>
-                <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.category}</Text>
-              </View>
-              <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
-                <Ionicons name="person-outline" size={16} color={colors.accent} />
-                <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Developer</Text>
-                <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.developer}</Text>
-              </View>
-            </View>
-
-            {androidReq && (
-              <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Ionicons name="phone-portrait-outline" size={16} color={colors.accent} />
-                <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Min Android</Text>
-                <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{androidReq}</Text>
-              </View>
-            )}
-
             {permissions && permissions.length > 0 && (
               <SectionBlock icon="shield-outline" title="PERMISSIONS REQUIRED" color="#f59e0b" bgColor="rgba(245,158,11,0.04)" borderColor="rgba(245,158,11,0.2)">
                 {permissions.map((item, i) => (
@@ -483,78 +471,6 @@ export default function AppDetailScreen() {
                     <Text style={[styles.sectionBody, { color: colors.mutedForeground, flex: 1 }]}>{item}</Text>
                   </View>
                 ))}
-              </SectionBlock>
-            )}
-
-            {appFacts && (
-              <SectionBlock icon="information-circle-outline" title="APP FACTS" color="#a78bfa" bgColor="rgba(167,139,250,0.05)" borderColor="rgba(167,139,250,0.2)">
-                {appFacts.architecture && (
-                  <View style={styles.factRow}>
-                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Architecture</Text>
-                    <Text style={[styles.factValue, { color: colors.foreground }]}>{appFacts.architecture}</Text>
-                  </View>
-                )}
-                {appFacts.contentRating && (
-                  <View style={styles.factRow}>
-                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Content Rating</Text>
-                    <Text style={[styles.factValue, { color: colors.foreground }]}>{appFacts.contentRating}</Text>
-                  </View>
-                )}
-                {appFacts.requirement && (
-                  <View style={styles.factRow}>
-                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Requirement</Text>
-                    <Text style={[styles.factValue, { color: colors.foreground }]}>{appFacts.requirement}</Text>
-                  </View>
-                )}
-                {appFacts.safetySummary && (
-                  <View style={[styles.factRow, { flexDirection: "column", alignItems: "flex-start", gap: 4 }]}>
-                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Safety</Text>
-                    <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>{appFacts.safetySummary}</Text>
-                  </View>
-                )}
-                {appFacts.supportSummary && (
-                  <View style={[styles.factRow, { flexDirection: "column", alignItems: "flex-start", gap: 4 }]}>
-                    <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Best For</Text>
-                    <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>{appFacts.supportSummary}</Text>
-                  </View>
-                )}
-              </SectionBlock>
-            )}
-
-            {seeMoreMods && seeMoreMods.length > 0 && (
-              <SectionBlock icon="apps-outline" title="SEE MORE MODS" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
-                <View style={{ gap: 8, marginTop: 4 }}>
-                  {seeMoreMods.map((m) => (
-                    <Pressable
-                      key={m.slug}
-                      onPress={() => { haptics.selection(); logSeeMoreModsPress(slug ?? "", m.slug); router.push(`/app/${m.slug}`); }}
-                      style={({ pressed }) => [styles.seeMoreRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
-                    >
-                      <Ionicons name="cube-outline" size={16} color={colors.primary} />
-                      <Text style={[styles.seeMoreText, { color: colors.foreground }]}>{m.label}</Text>
-                      <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
-                    </Pressable>
-                  ))}
-                </View>
-              </SectionBlock>
-            )}
-
-            {(detail?.telegramGroup || detail?.supportEmail) && (
-              <SectionBlock icon="headset-outline" title="SUPPORT" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
-                {detail.telegramGroup && (
-                  <Pressable onPress={() => Linking.openURL(detail.telegramGroup!)} style={[styles.supportRow, { borderColor: colors.border }]}>
-                    <MaterialCommunityIcons name="send" size={16} color="#2AABEE" />
-                    <Text style={[styles.supportText, { color: colors.foreground }]}>Telegram Support Group</Text>
-                    <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
-                  </Pressable>
-                )}
-                {detail.supportEmail && (
-                  <Pressable onPress={() => Linking.openURL(`mailto:${detail.supportEmail}`)} style={[styles.supportRow, { borderColor: colors.border }]}>
-                    <Ionicons name="mail-outline" size={16} color={colors.accent} />
-                    <Text style={[styles.supportText, { color: colors.foreground }]}>{detail.supportEmail}</Text>
-                    <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
-                  </Pressable>
-                )}
               </SectionBlock>
             )}
           </>
@@ -619,6 +535,109 @@ export default function AppDetailScreen() {
             )}
           </>
         )}
+
+        {/* ── Always Visible: Category / App Facts / Support ── */}
+        <View style={[styles.metaRow, { gap: 10 }]}>
+          <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
+            <Ionicons name="layers-outline" size={16} color={colors.accent} />
+            <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Category</Text>
+            <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.category}</Text>
+          </View>
+          <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border, flex: 1 }]}>
+            <Ionicons name="person-outline" size={16} color={colors.accent} />
+            <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Developer</Text>
+            <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{app.developer}</Text>
+          </View>
+        </View>
+
+        {androidReq && (
+          <View style={[styles.metaChip, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Ionicons name="phone-portrait-outline" size={16} color={colors.accent} />
+            <Text style={[styles.metaChipLabel, { color: colors.mutedForeground }]}>Min Android</Text>
+            <Text style={[styles.metaChipValue, { color: colors.foreground }]}>{androidReq}</Text>
+          </View>
+        )}
+
+        {appFacts && (
+          <SectionBlock icon="information-circle-outline" title="APP FACTS" color="#a78bfa" bgColor="rgba(167,139,250,0.05)" borderColor="rgba(167,139,250,0.2)">
+            {appFacts.architecture && (
+              <View style={styles.factRow}>
+                <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Architecture</Text>
+                <Text style={[styles.factValue, { color: colors.foreground }]}>{appFacts.architecture}</Text>
+              </View>
+            )}
+            {appFacts.contentRating && (
+              <View style={styles.factRow}>
+                <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Content Rating</Text>
+                <Text style={[styles.factValue, { color: colors.foreground }]}>{appFacts.contentRating}</Text>
+              </View>
+            )}
+            {appFacts.requirement && (
+              <View style={styles.factRow}>
+                <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Requirement</Text>
+                <Text style={[styles.factValue, { color: colors.foreground }]}>{appFacts.requirement}</Text>
+              </View>
+            )}
+            {appFacts.safetySummary && (
+              <View style={[styles.factRow, { flexDirection: "column", alignItems: "flex-start", gap: 4 }]}>
+                <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Safety</Text>
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>{appFacts.safetySummary}</Text>
+              </View>
+            )}
+            {appFacts.supportSummary && (
+              <View style={[styles.factRow, { flexDirection: "column", alignItems: "flex-start", gap: 4 }]}>
+                <Text style={[styles.factLabel, { color: "#a78bfa" }]}>Best For</Text>
+                <Text style={[styles.sectionBody, { color: colors.mutedForeground }]}>{appFacts.supportSummary}</Text>
+              </View>
+            )}
+          </SectionBlock>
+        )}
+
+        {seeMoreMods && seeMoreMods.length > 0 && (
+          <SectionBlock icon="apps-outline" title="SEE MORE MODS" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+            <View style={{ gap: 8, marginTop: 4 }}>
+              {seeMoreMods.map((m) => (
+                <Pressable
+                  key={m.slug}
+                  onPress={() => { haptics.selection(); logSeeMoreModsPress(slug ?? "", m.slug); router.push(`/app/${m.slug}`); }}
+                  style={({ pressed }) => [styles.seeMoreRow, { borderColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
+                >
+                  <Ionicons name="cube-outline" size={16} color={colors.primary} />
+                  <Text style={[styles.seeMoreText, { color: colors.foreground }]}>{m.label}</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.mutedForeground} />
+                </Pressable>
+              ))}
+            </View>
+          </SectionBlock>
+        )}
+
+        <SectionBlock icon="headset-outline" title="SUPPORT & FEEDBACK" color={colors.accent} bgColor={colors.card} borderColor={colors.border}>
+          {detail?.telegramGroup && (
+            <Pressable onPress={() => Linking.openURL(detail.telegramGroup!)} style={[styles.supportRow, { borderColor: colors.border }]}>
+              <MaterialCommunityIcons name="send" size={16} color="#2AABEE" />
+              <Text style={[styles.supportText, { color: colors.foreground }]}>Telegram Support Group</Text>
+              <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+          {detail?.supportEmail && (
+            <Pressable onPress={() => Linking.openURL(`mailto:${detail.supportEmail}`)} style={[styles.supportRow, { borderColor: colors.border }]}>
+              <Ionicons name="mail-outline" size={16} color={colors.accent} />
+              <Text style={[styles.supportText, { color: colors.foreground }]}>{detail.supportEmail}</Text>
+              <Ionicons name="arrow-forward" size={14} color={colors.mutedForeground} />
+            </Pressable>
+          )}
+          <Pressable
+            onPress={handleReportProblem}
+            style={({ pressed }) => [styles.supportRow, { borderColor: "rgba(239,68,68,0.3)", backgroundColor: "rgba(239,68,68,0.04)", borderRadius: 10, opacity: pressed ? 0.75 : 1 }]}
+          >
+            <Ionicons name="bug-outline" size={16} color="#ef4444" />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.supportText, { color: "#ef4444" }]}>Report a Problem</Text>
+              <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 1 }}>Opens pre-filled support email</Text>
+            </View>
+            <Ionicons name="mail" size={14} color="#ef4444" />
+          </Pressable>
+        </SectionBlock>
 
         {/* Downloads */}
         <View style={styles.downloadSection}>
@@ -836,7 +855,7 @@ const styles = StyleSheet.create({
   sectionBody: { fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular" },
   listItem: { flexDirection: "row", gap: 8, marginBottom: 6, alignItems: "flex-start" },
   listDot: { width: 6, height: 6, borderRadius: 3, marginTop: 8, flexShrink: 0 },
-  changeIndex: { fontSize: 13, fontFamily: "Inter_700Bold", width: 18, flexShrink: 0, marginTop: 3 },
+  changeIndex: { fontSize: 13, fontFamily: "Inter_700Bold", minWidth: 28, flexShrink: 0, marginTop: 3 },
   showMoreBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderTopWidth: 1, marginTop: 10, paddingTop: 10 },
   showMoreText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   metaRow: { flexDirection: "row" },
