@@ -914,7 +914,7 @@ export default function HomeScreen() {
               <View style={{ marginTop: 10 }}>
                 <View style={[styles.listHeader, { paddingBottom: 4 }]}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Ionicons name="download-circle" size={15} color="#fbbf24" />
+                    <Ionicons name="cloud-download" size={15} color="#fbbf24" />
                     <Text style={[styles.listHeaderTitle, { color: colors.foreground }]}>My Apps</Text>
                   </View>
                   <Pressable

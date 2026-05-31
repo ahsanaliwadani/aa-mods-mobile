@@ -23,6 +23,8 @@ import { useFirebaseAppDetail } from "@/hooks/useFirebaseAppDetail";
 import { useUserData } from "@/contexts/UserDataContext";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { logAppDetailView, logFavoriteToggle, logShareApp, logAppNotFound, logChangelogExpanded, logMirrorLinkUsed, logSeeMoreModsPress } from "@/lib/analytics";
+import { useInterstitialAd } from "@/hooks/useInterstitialAd";
+import { AdBanner } from "@/components/AdBanner";
 
 function StatCard({ label, value, colors }: { label: string; value: string; colors: ReturnType<typeof useColors> }) {
   return (
@@ -75,6 +77,7 @@ export default function AppDetailScreen() {
   const dlSheet = useDownloadSheet();
 
   const [showFullChangelog, setShowFullChangelog] = useState(false);
+  const { show: showInterstitial } = useInterstitialAd();
 
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
@@ -211,8 +214,11 @@ export default function AppDetailScreen() {
 
   const changelogToShow = showFullChangelog ? changelog : changelog?.slice(0, 4);
 
-  const handleDownload = (link: string, label: string) => {
+  const handleDownload = async (link: string, label: string) => {
     haptics.medium();
+    if (Platform.OS === "android") {
+      await showInterstitial().catch(() => {});
+    }
     dlSheet.open(link, label);
   };
 
@@ -591,6 +597,9 @@ export default function AppDetailScreen() {
               </View>
             )}
           </View>
+
+          {/* AdMob Banner between download section and mirror links */}
+          {Platform.OS === "android" && <AdBanner variant="banner2" style={{ marginTop: 8, marginBottom: 4 }} />}
 
           {/* Mirror links */}
           {mirrorLinks && mirrorLinks.length > 0 && (

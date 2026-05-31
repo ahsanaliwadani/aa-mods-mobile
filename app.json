@@ -56,7 +56,8 @@
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.REQUEST_INSTALL_PACKAGES",
         "android.permission.WAKE_LOCK",
-        "android.permission.FOREGROUND_SERVICE"
+        "android.permission.FOREGROUND_SERVICE",
+        "com.google.android.gms.permission.AD_ID"
       ]
     },
     "web": {
@@ -91,6 +92,15 @@
           "largeIcons": [
             "./assets/images/notification-icon.png"
           ]
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-7386485617389952~7325371535",
+          "iosAppId": "ca-app-pub-7386485617389952~7325371535",
+          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you.",
+          "skAdNetworkItems": []
         }
       ]
     ],

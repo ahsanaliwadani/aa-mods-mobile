@@ -12,10 +12,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
-import { useDownloadManager, type DownloadEntry } from "@/contexts/DownloadManagerContext";
+import { useDownloadManager, type DownloadEntry, SPEED_BOOST_DURATION_MS } from "@/contexts/DownloadManagerContext";
 import { AppIcon } from "@/components/AppIcon";
 import { haptics } from "@/lib/haptics";
 import { logScreenView } from "@/lib/analytics";
+import { AdBanner } from "@/components/AdBanner";
+import { useRewardedAd } from "@/hooks/useRewardedAd";
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "";
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -283,8 +285,29 @@ export default function DownloadsScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
   const dm = useDownloadManager();
+  const [boostCountdown, setBoostCountdown] = React.useState("");
+
+  const handleRewardEarned = React.useCallback(() => {
+    dm.activateSpeedBoost(SPEED_BOOST_DURATION_MS);
+    haptics.medium();
+  }, [dm]);
+
+  const { show: showRewardedAd, isReady: rewardedReady } = useRewardedAd(handleRewardEarned);
 
   React.useEffect(() => { logScreenView("downloads"); }, []);
+
+  React.useEffect(() => {
+    if (!dm.isSpeedBoosted || !dm.speedBoostUntil) { setBoostCountdown(""); return; }
+    const tick = () => {
+      const ms = Math.max(0, (dm.speedBoostUntil ?? 0) - Date.now());
+      const mins = Math.floor(ms / 60000);
+      const secs = Math.floor((ms % 60000) / 1000);
+      setBoostCountdown(`${mins}m ${secs}s`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [dm.isSpeedBoosted, dm.speedBoostUntil]);
 
   const allEntries = Array.from(dm.downloads.values());
   const active = allEntries.filter((e) => e.phase === "downloading" || e.phase === "resolving" || e.phase === "installing");
@@ -351,6 +374,57 @@ export default function DownloadsScreen() {
             { paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100 },
           ]}
         >
+          {/* AdMob Banner */}
+          {Platform.OS === "android" && <AdBanner variant="banner1" style={{ marginBottom: 8 }} />}
+
+          {/* Download Booster — rewarded ad */}
+          {Platform.OS === "android" && (
+            dm.isSpeedBoosted ? (
+              <View style={[boostStyles.activeBanner, { backgroundColor: "rgba(0,230,115,0.07)", borderColor: "rgba(0,230,115,0.25)" }]}>
+                <View style={boostStyles.activeLeft}>
+                  <View style={[boostStyles.boostBadge, { backgroundColor: "rgba(0,230,115,0.12)" }]}>
+                    <Text style={boostStyles.boostBadgeIcon}>⚡</Text>
+                  </View>
+                  <View>
+                    <Text style={[boostStyles.activeTitle, { color: "#00e673" }]}>Download Boost Active</Text>
+                    <Text style={[boostStyles.activeSub, { color: colors.mutedForeground }]}>Maximum speed until expired</Text>
+                  </View>
+                </View>
+                <View style={[boostStyles.activePill, { backgroundColor: "rgba(0,230,115,0.12)", borderColor: "rgba(0,230,115,0.3)" }]}>
+                  <Text style={[boostStyles.activePillText, { color: "#00e673" }]}>{boostCountdown || "Active"}</Text>
+                </View>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => { haptics.medium(); showRewardedAd(); }}
+                style={({ pressed }) => [
+                  boostStyles.watchBanner,
+                  {
+                    backgroundColor: "rgba(251,191,36,0.06)",
+                    borderColor: "rgba(251,191,36,0.25)",
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}
+              >
+                <View style={boostStyles.watchLeft}>
+                  <View style={[boostStyles.boostBadge, { backgroundColor: "rgba(251,191,36,0.12)" }]}>
+                    <Text style={boostStyles.boostBadgeIcon}>🎬</Text>
+                  </View>
+                  <View>
+                    <Text style={[boostStyles.watchTitle, { color: "#fbbf24" }]}>Boost Download Speed</Text>
+                    <Text style={[boostStyles.watchSub, { color: colors.mutedForeground }]}>Watch a short ad for 30 min max speed</Text>
+                  </View>
+                </View>
+                <View style={[boostStyles.watchBtn, { backgroundColor: rewardedReady ? "#fbbf24" : colors.secondary }]}>
+                  <Ionicons name="play" size={11} color={rewardedReady ? "#0a0a0a" : colors.mutedForeground} />
+                  <Text style={[boostStyles.watchBtnText, { color: rewardedReady ? "#0a0a0a" : colors.mutedForeground }]}>
+                    {rewardedReady ? "Watch Ad" : "Loading…"}
+                  </Text>
+                </View>
+              </Pressable>
+            )
+          )}
+
           {/* Active */}
           {active.length > 0 && (
             <View style={styles.section}>

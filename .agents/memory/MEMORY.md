@@ -1,1 +1,3 @@
+- [Unity Ads integration](unity-ads.md) — react-native-unity-ads@1.0.3; web must be guarded; initialized at module level with __DEV__ as testMode flag
 - [pnpm store fix](pnpm-store.md) — store-dir must be pinned to v10 in .npmrc; use system pnpm at /nix/store path with --no-frozen-lockfile when adding packages
+- [AdMob native-only modules](admob-web-stubs.md) — react-native-google-mobile-ads requires .web.ts stubs for every file that imports it; Metro statically follows require() even inside Platform.OS guards

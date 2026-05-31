@@ -32,6 +32,8 @@ import { ensureAnonymousAuth } from "@/lib/firebase";
 import { useRemoteConfig } from "@/hooks/useRemoteConfig";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { initializeOneSignal, setInboxCallback } from "@/lib/oneSignal";
+import { initializeAdMob } from "@/lib/admob";
+import { useAppOpenAd } from "@/hooks/useAppOpenAd";
 
 const GestureHandlerRootView = _GestureHandlerRootView as unknown as React.ComponentType<{
   style?: object;
@@ -43,6 +45,7 @@ const isExpoGo = Constants.appOwnership === "expo";
 SplashScreen.preventAutoHideAsync();
 
 initializeOneSignal();
+initializeAdMob();
 
 if (Platform.OS !== "web") {
   try {
@@ -97,6 +100,7 @@ function RootLayoutNav() {
   const { addItem } = useNotificationInbox();
   const dm = useDownloadManager();
   const { shouldShowRating, recordDownload, dismiss: dismissRating, markRated } = useAppRating(config);
+  useAppOpenAd();
 
   // Track download phase changes → always add to inbox (and also fire local push notification separately)
   useEffect(() => {
