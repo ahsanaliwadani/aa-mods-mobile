@@ -25,6 +25,9 @@ if (Platform.OS !== "web") {
   });
 }
 
+// Custom AA Mods notification sound — copied to android/app/src/main/res/raw/ via expo-notifications plugin config
+const AA_MODS_SOUND = "aa_mods_notif";
+
 // Create Android notification channels — call this early at app start,
 // independently of whether EAS push tokens are available.
 export async function setupNotificationChannels(): Promise<void> {
@@ -36,7 +39,7 @@ export async function setupNotificationChannels(): Promise<void> {
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#00e673",
-      sound: "default",
+      sound: AA_MODS_SOUND,
       enableVibrate: true,
       showBadge: true,
       bypassDnd: false,
@@ -48,7 +51,7 @@ export async function setupNotificationChannels(): Promise<void> {
       description: "General AA Mods notifications",
       importance: Notifications.AndroidImportance.DEFAULT,
       lightColor: "#22d3ee",
-      sound: "default",
+      sound: AA_MODS_SOUND,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     }).catch(() => {});
 
@@ -58,7 +61,7 @@ export async function setupNotificationChannels(): Promise<void> {
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 500, 200, 500],
       lightColor: "#ff4444",
-      sound: "default",
+      sound: AA_MODS_SOUND,
       enableVibrate: true,
       showBadge: true,
       bypassDnd: true,

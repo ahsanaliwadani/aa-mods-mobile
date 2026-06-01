@@ -124,7 +124,7 @@ export default function AppDetailScreen() {
   };
 
   const handleReportProblem = () => {
-    const email = detail?.supportEmail || 'contact@aamods.com';
+    const email = detail?.supportEmail || 'aa.mods.support@gmail.com';
     const subject = encodeURIComponent(`Report a Problem — ${app?.name ?? ''} v${app?.version ?? ''}`);
     const body = encodeURIComponent(
       `App: ${app?.name ?? ''}\nVersion: ${app?.version ?? ''}\nCategory: ${app?.category ?? ''}\n\n--- Describe your issue below ---\n\n`

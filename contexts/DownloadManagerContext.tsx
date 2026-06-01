@@ -312,8 +312,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     return null;
   }, [setDownloadDir]);
 
-  // Write APK bytes to a SAF directory. Reads source BEFORE creating destination
-  // so a failed read never leaves a 0B file behind.
+  // Write APK to a SAF directory using copyAsync — avoids loading large APKs into JS memory.
   const writeApkToSafDir = useCallback(async (
     apkPath: string,
     dirUri: string,
@@ -322,27 +321,41 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     if (!FileSystem) return null;
     const SAF = FileSystem.StorageAccessFramework;
     try {
-      // 1. Read source first — if this throws, nothing is created at dest
-      const content = await FileSystem.readAsStringAsync(apkPath, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      if (!content || content.length === 0) return null;
+      // Verify source file exists before doing anything
+      const info = await FileSystem.getInfoAsync(apkPath);
+      if (!info.exists) return null;
 
-      // 2. Create destination file only after we have valid content
+      // Create the destination file entry in the SAF directory
       const destUri = await SAF.createFileAsync(
         dirUri,
         fileName,
         "application/vnd.android.package-archive",
       );
 
-      // 3. Write content
-      await FileSystem.writeAsStringAsync(destUri, content, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      // Use copyAsync — streams bytes natively, no base64 bridge overhead
+      await FileSystem.copyAsync({ from: apkPath, to: destUri });
 
       return destUri;
     } catch {
-      return null;
+      // Fallback: try base64 read/write for older devices if copyAsync fails
+      try {
+        const SAF2 = FileSystem.StorageAccessFramework;
+        const content = await FileSystem.readAsStringAsync(apkPath, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        if (!content || content.length === 0) return null;
+        const destUri2 = await SAF2.createFileAsync(
+          dirUri,
+          fileName,
+          "application/vnd.android.package-archive",
+        );
+        await FileSystem.writeAsStringAsync(destUri2, content, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        return destUri2;
+      } catch {
+        return null;
+      }
     }
   }, []);
 
@@ -479,6 +492,35 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           return;
         }
         logWifiOnlyBypassed(slug, appName);
+      }
+
+      // ── Storage permission check (Android only) ───────────────────────
+      if (Platform.OS === "android") {
+        try {
+          const { PermissionsAndroid } = require("react-native");
+          const perms: string[] = [
+            PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+          ];
+          const results = await PermissionsAndroid.requestMultiple(perms);
+          const allGranted = Object.values(results).every(
+            (r) => r === PermissionsAndroid.RESULTS.GRANTED || r === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
+          );
+          // On Android 13+ these permissions are deprecated but SAF still works — proceed regardless
+          if (!allGranted) {
+            const proceed = await new Promise<boolean>((resolve) => {
+              Alert.alert(
+                "Storage Permission",
+                "Storage permission was not granted. The APK will be saved to app-private storage only (you can still install it). Continue?",
+                [
+                  { text: "Continue Anyway", onPress: () => resolve(true) },
+                  { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                ],
+              );
+            });
+            if (!proceed) return;
+          }
+        } catch {}
       }
 
       // ── Download folder setup (Android only, prompt if no folder set) ───
