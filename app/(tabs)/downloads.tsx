@@ -225,7 +225,9 @@ function DownloadCard({
             </Pressable>
           )}
 
-          {Platform.OS === "android" && isFinished && entry.apkPath && !entry.apkPath.startsWith("content://") && (
+          {Platform.OS === "android" && isFinished && entry.apkPath &&
+            !entry.apkPath.startsWith("content://") &&
+            !entry.apkPath.includes("/storage/emulated/0/Download") && (
             <Pressable
               onPress={handleSaveToDownloads}
               hitSlop={8}

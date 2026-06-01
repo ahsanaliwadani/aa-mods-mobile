@@ -192,6 +192,6 @@ export function logAllDataReset(): void {
 
 // ─── External Links ────────────────────────────────────────────────────────
 
-export function logExternalLinkOpened(linkType: "telegram" | "discord" | "instagram" | "website" | "support" | "other"): void {
+export function logExternalLinkOpened(linkType: "telegram" | "discord" | "instagram" | "website" | "support" | "helpline_bot" | "other"): void {
   logAnalyticsEvent("external_link_opened", { link_type: linkType });
 }
