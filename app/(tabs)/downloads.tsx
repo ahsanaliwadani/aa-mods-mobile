@@ -172,6 +172,27 @@ function DownloadCard({
     ? "rgba(0,230,115,0.2)"
     : colors.border;
 
+  const handleOpenFileManager = async () => {
+    if (Platform.OS !== "android") return;
+    haptics.light();
+    try {
+      const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
+      const folderUri = (entry.apkPath ?? "").includes("/Download/AAMods/")
+        ? "content://com.android.externalstorage.documents/document/primary%3ADownload%2FAAMods"
+        : "content://com.android.externalstorage.documents/document/primary%3ADownload";
+      await IL.startActivityAsync("android.intent.action.VIEW", {
+        data: folderUri,
+        type: "vnd.android.document/directory",
+        flags: 1,
+      });
+    } catch {
+      Alert.alert(
+        "Open File Manager",
+        "Open your file manager app and navigate to:\nInternal Storage → Download → AAMods",
+      );
+    }
+  };
+
   const handleSaveToDownloads = async () => {
     setSaving(true);
     haptics.medium();
@@ -344,6 +365,14 @@ function DownloadCard({
               {getDisplayPath(entry.apkPath)}
             </Text>
           </View>
+          <Pressable
+            onPress={handleOpenFileManager}
+            hitSlop={8}
+            style={[styles.openFolderBtn, { backgroundColor: "rgba(0,230,115,0.14)", borderColor: "rgba(0,230,115,0.32)" }]}
+          >
+            <Ionicons name="folder-open-outline" size={12} color={colors.primary} />
+            <Text style={[styles.openFolderBtnText, { color: colors.primary }]}>Open</Text>
+          </Pressable>
         </View>
       )}
 
@@ -779,6 +808,16 @@ const styles = StyleSheet.create({
   },
   savedBadgeTitle: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold" },
   savedBadgePath: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 1 },
+  openFolderBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  openFolderBtnText: { fontSize: 10, fontWeight: "700", fontFamily: "Inter_700Bold" },
   errorText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   emptyOuter: { flex: 1 },
   emptyBoostWrap: { paddingHorizontal: 16, paddingTop: 16 },
