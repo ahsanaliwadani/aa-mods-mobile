@@ -44,6 +44,23 @@ function formatBoostCountdown(until: number): string {
   return `${mins}m ${secs}s`;
 }
 
+function isApkInPhoneStorage(apkPath: string): boolean {
+  return (
+    apkPath.startsWith("content://") ||
+    apkPath.includes("/storage/emulated/0/Download")
+  );
+}
+
+function getDisplayPath(apkPath: string): string {
+  if (!apkPath) return "";
+  if (apkPath.startsWith("content://")) return "Saved via folder picker";
+  try {
+    const idx = apkPath.indexOf("/Download/");
+    if (idx !== -1) return apkPath.substring(idx + 1);
+  } catch {}
+  return apkPath.split("/").pop() ?? apkPath;
+}
+
 function formatHistoryDate(ts: number): string {
   const d = new Date(ts);
   const diffDays = Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
@@ -161,9 +178,16 @@ function DownloadCard({
     const result = await dm.saveApkToDownloads(entry.slug);
     setSaving(false);
     if (result === "saved") {
-      Alert.alert("Saved!", `${entry.appName} APK saved to your selected folder.`);
+      haptics.medium();
+      Alert.alert(
+        "Saved to Phone Storage ✓",
+        "APK saved to Downloads/AAMods — open your file manager to find it.",
+      );
     } else if (result === "error") {
-      Alert.alert("Save Failed", "Could not write the APK to the selected folder. Try picking a different folder, or check storage permissions.");
+      Alert.alert(
+        "Save Failed",
+        "Could not save the APK.\n\nOn Android 10+, go to Settings → Apps → AA Mods → Permissions and grant 'All files access', or tap the folder icon again to pick a folder manually.",
+      );
     }
   };
 
@@ -307,6 +331,19 @@ function DownloadCard({
           <Text style={[styles.installedBadgeText, { color: "#22d3ee" }]}>
             APK is saved on device — tap Reinstall any time
           </Text>
+        </View>
+      )}
+
+      {/* Saved to phone storage indicator */}
+      {Platform.OS === "android" && isFinished && entry.apkPath && isApkInPhoneStorage(entry.apkPath) && (
+        <View style={[styles.savedBadge, { backgroundColor: "rgba(0,230,115,0.07)", borderColor: "rgba(0,230,115,0.18)" }]}>
+          <Ionicons name="folder" size={14} color={colors.primary} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[styles.savedBadgeTitle, { color: colors.primary }]}>Saved to Phone Storage ✓</Text>
+            <Text style={[styles.savedBadgePath, { color: colors.mutedForeground }]} numberOfLines={1} ellipsizeMode="middle">
+              {getDisplayPath(entry.apkPath)}
+            </Text>
+          </View>
         </View>
       )}
 
@@ -731,6 +768,17 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   installedBadgeText: { fontSize: 11, fontFamily: "Inter_400Regular", flex: 1 },
+  savedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  savedBadgeTitle: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  savedBadgePath: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 1 },
   errorText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   emptyOuter: { flex: 1 },
   emptyBoostWrap: { paddingHorizontal: 16, paddingTop: 16 },
