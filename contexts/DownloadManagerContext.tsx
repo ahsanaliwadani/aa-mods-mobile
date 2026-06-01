@@ -312,7 +312,9 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     return null;
   }, [setDownloadDir]);
 
-  // Write APK to a SAF directory using copyAsync — avoids loading large APKs into JS memory.
+  // Write APK to a SAF directory. Creates the dest file once, then tries copyAsync
+  // (native, no JS memory overhead for large files). Falls back to base64 on older devices.
+  // If both fail the empty dest file is cleaned up to avoid leaving 0-byte garbage behind.
   const writeApkToSafDir = useCallback(async (
     apkPath: string,
     dirUri: string,
@@ -320,42 +322,36 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   ): Promise<string | null> => {
     if (!FileSystem) return null;
     const SAF = FileSystem.StorageAccessFramework;
+    let destUri: string | null = null;
     try {
-      // Verify source file exists before doing anything
       const info = await FileSystem.getInfoAsync(apkPath);
       if (!info.exists) return null;
 
-      // Create the destination file entry in the SAF directory
-      const destUri = await SAF.createFileAsync(
+      destUri = await SAF.createFileAsync(
         dirUri,
         fileName,
         "application/vnd.android.package-archive",
       );
 
-      // Use copyAsync — streams bytes natively, no base64 bridge overhead
-      await FileSystem.copyAsync({ from: apkPath, to: destUri });
-
-      return destUri;
-    } catch {
-      // Fallback: try base64 read/write for older devices if copyAsync fails
+      // Primary: native copy — no base64 overhead, works for any file size
       try {
-        const SAF2 = FileSystem.StorageAccessFramework;
+        await FileSystem.copyAsync({ from: apkPath, to: destUri });
+        return destUri;
+      } catch {
+        // Fallback: base64 read/write for devices where copyAsync → SAF URI is unsupported
         const content = await FileSystem.readAsStringAsync(apkPath, {
           encoding: FileSystem.EncodingType.Base64,
         });
-        if (!content || content.length === 0) return null;
-        const destUri2 = await SAF2.createFileAsync(
-          dirUri,
-          fileName,
-          "application/vnd.android.package-archive",
-        );
-        await FileSystem.writeAsStringAsync(destUri2, content, {
+        if (!content || content.length === 0) throw new Error("empty_content");
+        await FileSystem.writeAsStringAsync(destUri, content, {
           encoding: FileSystem.EncodingType.Base64,
         });
-        return destUri2;
-      } catch {
-        return null;
+        return destUri;
       }
+    } catch {
+      // Clean up the empty dest file so the SAF folder stays tidy
+      if (destUri) FileSystem.deleteAsync(destUri, { idempotent: true }).catch(() => {});
+      return null;
     }
   }, []);
 

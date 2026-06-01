@@ -625,7 +625,7 @@ function OfflineScreen({
       <View style={[styles.header, { paddingTop: topInset + 12, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View style={styles.headerTop}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Image source={require("@/assets/images/icon.png")} style={{ width: 36, height: 36, borderRadius: 10 }} contentFit="cover" cachePolicy="memory-disk" />
+            <Image source={require("@/assets/images/icon.png")} style={{ width: 46, height: 46, borderRadius: 13 }} contentFit="cover" cachePolicy="memory-disk" />
             <View>
               <Text style={[styles.headerEyebrow, { color: colors.accent }]}>VERIFIED MODS</Text>
               <Text style={[styles.headerTitle, { color: colors.foreground }]}>AA Mods Store</Text>
@@ -815,7 +815,7 @@ export default function HomeScreen() {
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <Image
               source={require("@/assets/images/icon.png")}
-              style={{ width: 36, height: 36, borderRadius: 10 }}
+              style={{ width: 46, height: 46, borderRadius: 13 }}
               contentFit="cover"
               cachePolicy="memory-disk"
             />

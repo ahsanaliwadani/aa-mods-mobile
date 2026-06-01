@@ -10,6 +10,7 @@ import { ref, get } from "firebase/database";
 import { database } from "@/lib/firebase";
 import {
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -26,7 +27,7 @@ import { useUserData } from "@/contexts/UserDataContext";
 import { useDownloadManager } from "@/contexts/DownloadManagerContext";
 import { AppIcon } from "@/components/AppIcon";
 import { haptics, refreshHapticsPreference } from "@/lib/haptics";
-import { logScreenView, logSettingChanged, logCacheCleared, logAllDataReset, logExternalLinkOpened } from "@/lib/analytics";
+import { logScreenView, logSettingChanged, logCacheCleared, logExternalLinkOpened } from "@/lib/analytics";
 import { useNotificationInbox } from "@/contexts/NotificationInboxContext";
 
 const PREFS_KEY = "@aa_mods_prefs_v1";
@@ -186,6 +187,200 @@ function AppRow({ app, onPress, trailing }: { app: LiveStoreCatalogApp; onPress:
   );
 }
 
+type ClearItemKey = "apk_files" | "downloads" | "history" | "installed" | "favorites" | "recently_viewed" | "inbox" | "prefs";
+
+const CLEAR_ITEMS: { key: ClearItemKey; label: string; sub: string; icon: string; iconColor: string }[] = [
+  { key: "apk_files",       label: "APK Files",             sub: "Downloaded APK files on device",        icon: "document-outline",        iconColor: "#f59e0b" },
+  { key: "downloads",       label: "Download Records",       sub: "Completed & failed download entries",   icon: "download-outline",         iconColor: "#00e673" },
+  { key: "history",         label: "Download History",       sub: "History log of all downloads",          icon: "time-outline",             iconColor: "#22d3ee" },
+  { key: "installed",       label: "Installed App Records",  sub: "Which apps you've installed",           icon: "phone-portrait-outline",   iconColor: "#8b5cf6" },
+  { key: "favorites",       label: "Favorites",              sub: "Your saved favourite apps",             icon: "heart-outline",            iconColor: "#ef4444" },
+  { key: "recently_viewed", label: "Recently Viewed",        sub: "Apps you've opened recently",           icon: "eye-outline",              iconColor: "#3b82f6" },
+  { key: "inbox",           label: "Notification Inbox",     sub: "All notification messages",             icon: "mail-outline",             iconColor: "#fbbf24" },
+  { key: "prefs",           label: "App Preferences",        sub: "Reset all settings to defaults",        icon: "settings-outline",         iconColor: "#6b7280" },
+];
+
+function ClearDataModal({
+  visible,
+  onClose,
+  cacheBytes,
+  onCleared,
+  dm,
+  clearFavorites,
+  clearRecentlyViewed,
+  clearInbox,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  cacheBytes: number;
+  onCleared: () => void;
+  dm: ReturnType<typeof import("@/contexts/DownloadManagerContext").useDownloadManager>;
+  clearFavorites: () => void;
+  clearRecentlyViewed: () => void;
+  clearInbox: () => void;
+}) {
+  const colors = useColors();
+  const [selected, setSelected] = useState<Set<ClearItemKey>>(new Set());
+  const [running, setRunning] = useState(false);
+
+  const allSelected = selected.size === CLEAR_ITEMS.length;
+
+  const toggle = (key: ClearItemKey) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(CLEAR_ITEMS.map((i) => i.key)));
+  };
+
+  const handleDelete = async () => {
+    if (selected.size === 0) return;
+    const labels = CLEAR_ITEMS.filter((i) => selected.has(i.key)).map((i) => `• ${i.label}`).join("\n");
+    Alert.alert(
+      "Confirm Delete",
+      `The following data will be permanently deleted:\n\n${labels}\n\nThis cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setRunning(true);
+            try {
+              if (selected.has("apk_files") && AA_MODS_DIR) {
+                try {
+                  const files = await FileSystem.readDirectoryAsync(AA_MODS_DIR);
+                  for (const f of files) {
+                    if (f.toLowerCase().endsWith(".apk")) {
+                      await FileSystem.deleteAsync(`${AA_MODS_DIR}${f}`, { idempotent: true }).catch(() => {});
+                    }
+                  }
+                } catch {
+                  await FileSystem.deleteAsync(AA_MODS_DIR, { idempotent: true }).catch(() => {});
+                  await FileSystem.makeDirectoryAsync(AA_MODS_DIR, { intermediates: true }).catch(() => {});
+                }
+              }
+              if (selected.has("downloads")) dm.clearAllCompleted();
+              if (selected.has("history")) dm.clearHistory();
+              if (selected.has("installed")) Object.keys(dm.installedApps).forEach((s) => dm.clearInstalledApp(s));
+              if (selected.has("favorites")) clearFavorites();
+              if (selected.has("recently_viewed")) clearRecentlyViewed();
+              if (selected.has("inbox")) clearInbox();
+              if (selected.has("prefs")) await AsyncStorage.removeItem("@aa_mods_prefs_v1").catch(() => {});
+              onCleared();
+              onClose();
+              setSelected(new Set());
+              Alert.alert("Done", "Selected data has been deleted.");
+            } finally {
+              setRunning(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable style={cdStyles.overlay} onPress={onClose}>
+        <Pressable style={[cdStyles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={cdStyles.handle} />
+
+          <View style={cdStyles.titleRow}>
+            <Text style={[cdStyles.title, { color: colors.foreground }]}>Clear Data</Text>
+            <Pressable
+              onPress={toggleAll}
+              style={[cdStyles.selectAllBtn, { borderColor: allSelected ? colors.primary : colors.border, backgroundColor: allSelected ? "rgba(0,230,115,0.1)" : colors.secondary }]}
+            >
+              <Text style={[cdStyles.selectAllText, { color: allSelected ? colors.primary : colors.mutedForeground }]}>
+                {allSelected ? "Deselect All" : "Select All"}
+              </Text>
+            </Pressable>
+          </View>
+
+          <Text style={[cdStyles.subtitle, { color: colors.mutedForeground }]}>
+            Select what you want to delete. This cannot be undone.
+          </Text>
+
+          <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+            {CLEAR_ITEMS.map((item) => {
+              const active = selected.has(item.key);
+              const sub = item.key === "apk_files" && cacheBytes > 0
+                ? `${(cacheBytes / 1024 / 1024).toFixed(1)} MB — ${item.sub}`
+                : item.sub;
+              return (
+                <Pressable
+                  key={item.key}
+                  onPress={() => toggle(item.key)}
+                  style={[cdStyles.item, { borderColor: active ? item.iconColor + "55" : colors.border, backgroundColor: active ? item.iconColor + "0f" : colors.background }]}
+                >
+                  <View style={[cdStyles.itemIcon, { backgroundColor: item.iconColor + "18" }]}>
+                    <Ionicons name={item.icon as "settings"} size={16} color={item.iconColor} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[cdStyles.itemLabel, { color: colors.foreground }]}>{item.label}</Text>
+                    <Text style={[cdStyles.itemSub, { color: colors.mutedForeground }]}>{sub}</Text>
+                  </View>
+                  <View style={[cdStyles.checkbox, { borderColor: active ? item.iconColor : colors.border, backgroundColor: active ? item.iconColor : "transparent" }]}>
+                    {active && <Ionicons name="checkmark" size={12} color="#fff" />}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <Pressable
+            onPress={handleDelete}
+            disabled={selected.size === 0 || running}
+            style={({ pressed }) => [
+              cdStyles.deleteBtn,
+              {
+                backgroundColor: selected.size === 0 ? colors.secondary : "rgba(239,68,68,0.12)",
+                borderColor: selected.size === 0 ? colors.border : "rgba(239,68,68,0.35)",
+                opacity: pressed || running ? 0.75 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="trash-outline" size={16} color={selected.size === 0 ? colors.mutedForeground : "#ef4444"} />
+            <Text style={[cdStyles.deleteBtnText, { color: selected.size === 0 ? colors.mutedForeground : "#ef4444" }]}>
+              {running ? "Deleting…" : selected.size === 0 ? "Select items above" : `Delete ${selected.size} item${selected.size !== 1 ? "s" : ""}`}
+            </Text>
+          </Pressable>
+
+          <Pressable onPress={onClose} style={[cdStyles.cancelBtn, { borderColor: colors.border }]}>
+            <Text style={[cdStyles.cancelText, { color: colors.mutedForeground }]}>Cancel</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const cdStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "flex-end" },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderBottomWidth: 0, paddingHorizontal: 20, paddingBottom: 40, paddingTop: 10, gap: 12 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.15)", alignSelf: "center", marginBottom: 4 },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  title: { fontSize: 20, fontWeight: "800", fontFamily: "Inter_700Bold" },
+  selectAllBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1 },
+  selectAllText: { fontSize: 12, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: -4 },
+  item: { flexDirection: "row", alignItems: "center", gap: 12, borderRadius: 14, borderWidth: 1, padding: 12, marginBottom: 8 },
+  itemIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  itemLabel: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  itemSub: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  deleteBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, borderWidth: 1, paddingVertical: 14 },
+  deleteBtnText: { fontSize: 14, fontWeight: "700", fontFamily: "Inter_700Bold" },
+  cancelBtn: { alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: 1, paddingVertical: 13 },
+  cancelText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+});
+
 function openUrl(url: string) {
   if (!url) return;
   Linking.openURL(url.startsWith("http") ? url : `https://${url}`).catch(() => {});
@@ -238,7 +433,7 @@ export default function SettingsScreen() {
   const [cacheBytes, setCacheBytes] = useState(0);
   const [clearingCache, setClearingCache] = useState(false);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
-  const [clearingAll, setClearingAll] = useState(false);
+  const [clearModalVisible, setClearModalVisible] = useState(false);
 
   useEffect(() => { logScreenView("settings"); }, []);
 
@@ -316,44 +511,6 @@ export default function SettingsScreen() {
     }
   }, [refreshCacheSize]);
 
-  const clearAllData = useCallback(async () => {
-    Alert.alert(
-      "Reset All App Data",
-      "This will clear all favorites, recently viewed, download records, installed records, and preferences. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset Everything",
-          style: "destructive",
-          onPress: async () => {
-            setClearingAll(true);
-            try {
-              // Clear AsyncStorage keys
-              await Promise.all(ALL_STORAGE_KEYS.map((k) => AsyncStorage.removeItem(k).catch(() => {})));
-
-              // Delete downloads folder
-              if (AA_MODS_DIR) {
-                await FileSystem.deleteAsync(AA_MODS_DIR, { idempotent: true }).catch(() => {});
-                await FileSystem.makeDirectoryAsync(AA_MODS_DIR, { intermediates: true }).catch(() => {});
-              }
-
-              clearFavorites();
-              clearRecentlyViewed();
-              clearInbox();
-              setPrefs(DEFAULT_PREFS);
-              await refreshCacheSize();
-              logAllDataReset();
-              haptics.medium();
-              Alert.alert("Done", "All app data has been reset.");
-            } finally {
-              setClearingAll(false);
-            }
-          },
-        },
-      ],
-    );
-  }, [clearFavorites, clearRecentlyViewed, refreshCacheSize, clearInbox]);
-
   const favoriteApps = favorites
     .map((slug) => apps.find((a) => a.slug === slug))
     .filter(Boolean) as LiveStoreCatalogApp[];
@@ -410,8 +567,9 @@ export default function SettingsScreen() {
   const handleAppPress = (slug: string) => { haptics.light(); router.push(`/app/${slug}`); };
 
   return (
+    <View style={[sStyles.container, { backgroundColor: colors.background }]}>
     <ScrollView
-      style={[sStyles.container, { backgroundColor: colors.background }]}
+      style={{ flex: 1 }}
       contentContainerStyle={[
         sStyles.scrollContent,
         { paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100 },
@@ -818,30 +976,33 @@ export default function SettingsScreen() {
       <View style={sStyles.group}>
         <SectionTitle title="Data Management" />
         <View style={sStyles.rowGroup}>
-          {installedCount > 0 && (
-            <SettingRow
-              icon="phone-portrait-outline"
-              iconColor="#f59e0b"
-              label="Clear Installed Records"
-              sub={`Remove ${installedCount} installed app record${installedCount !== 1 ? "s" : ""}`}
-              destructive
-              onPress={() => {
-                haptics.medium();
-                Object.keys(dm.installedApps).forEach((slug) => dm.clearInstalledApp(slug));
-              }}
-            />
-          )}
           <SettingRow
-            icon="nuclear-outline"
-            label="Reset All App Data"
-            sub="Clear all data, preferences & downloads"
-            destructive
-            disabled={clearingAll}
-            onPress={clearAllData}
+            icon="trash-outline"
+            iconColor="#ef4444"
+            label="Clear Data"
+            sub="Choose exactly what to delete — APKs, history, favourites & more"
+            onPress={() => { haptics.medium(); setClearModalVisible(true); }}
+            trailing={
+              <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: "rgba(239,68,68,0.35)", backgroundColor: "rgba(239,68,68,0.08)" }}>
+                <Text style={{ fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold", color: "#ef4444" }}>Manage</Text>
+              </View>
+            }
           />
         </View>
       </View>
     </ScrollView>
+
+    <ClearDataModal
+      visible={clearModalVisible}
+      onClose={() => setClearModalVisible(false)}
+      cacheBytes={cacheBytes}
+      onCleared={refreshCacheSize}
+      dm={dm}
+      clearFavorites={clearFavorites}
+      clearRecentlyViewed={clearRecentlyViewed}
+      clearInbox={clearInbox}
+    />
+    </View>
   );
 }
 
