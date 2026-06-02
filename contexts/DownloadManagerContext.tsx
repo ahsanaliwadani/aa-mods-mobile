@@ -448,8 +448,12 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         updateEntry(slug, { apkPath: destUri });
         return "saved";
       }
+      // Write failed even with fresh permission — clear saved dir so next
+      // attempt shows the folder picker again instead of silently failing
+      setDownloadDir(null);
       return "error";
     } catch {
+      setDownloadDir(null);
       return "error";
     }
   }, [tryCopyToPublicDownloads, writeApkToSafDir, setDownloadDir, updateEntry]);

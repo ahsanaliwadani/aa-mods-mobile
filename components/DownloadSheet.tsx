@@ -147,6 +147,23 @@ export function DownloadSheet({
     onClose();
   };
 
+  const openAllFilesAccessSettings = async () => {
+    try {
+      const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
+      await IL.startActivityAsync(
+        "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION",
+        { data: "package:com.aa.mods" },
+      );
+    } catch {
+      try {
+        const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
+        await IL.startActivityAsync("android.settings.APPLICATION_DETAILS_SETTINGS", {
+          data: "package:com.aa.mods",
+        });
+      } catch {}
+    }
+  };
+
   const handleSaveToStorage = async () => {
     if (!appSlug) return;
     haptics.medium();
@@ -156,7 +173,21 @@ export function DownloadSheet({
       if (result === "saved") {
         Alert.alert("Saved!", "APK has been saved to your selected folder.");
       } else if (result === "error") {
-        Alert.alert("Save Failed", "Could not write the APK to the selected folder. Try picking a different folder, or check storage permissions.");
+        Alert.alert(
+          "Save Failed",
+          "Could not save the APK to phone storage.\n\nEither grant 'All files access' permission, or pick a folder manually.",
+          [
+            {
+              text: "Grant All Files Access",
+              onPress: openAllFilesAccessSettings,
+            },
+            {
+              text: "Pick Folder",
+              onPress: handleSaveToStorage,
+            },
+            { text: "Cancel", style: "cancel" },
+          ],
+        );
       }
       // "cancelled" = user dismissed folder picker — no alert needed
     } finally {

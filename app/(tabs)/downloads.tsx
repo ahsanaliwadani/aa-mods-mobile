@@ -193,6 +193,23 @@ function DownloadCard({
     }
   };
 
+  const openAllFilesAccessSettings = async () => {
+    try {
+      const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
+      await IL.startActivityAsync(
+        "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION",
+        { data: "package:com.aa.mods" },
+      );
+    } catch {
+      try {
+        const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
+        await IL.startActivityAsync("android.settings.APPLICATION_DETAILS_SETTINGS", {
+          data: "package:com.aa.mods",
+        });
+      } catch {}
+    }
+  };
+
   const handleSaveToDownloads = async () => {
     setSaving(true);
     haptics.medium();
@@ -207,7 +224,18 @@ function DownloadCard({
     } else if (result === "error") {
       Alert.alert(
         "Save Failed",
-        "Could not save the APK.\n\nOn Android 10+, go to Settings → Apps → AA Mods → Permissions and grant 'All files access', or tap the folder icon again to pick a folder manually.",
+        "Could not save the APK to phone storage.\n\nEither grant 'All files access' permission, or pick a folder manually.",
+        [
+          {
+            text: "Grant All Files Access",
+            onPress: openAllFilesAccessSettings,
+          },
+          {
+            text: "Pick Folder",
+            onPress: handleSaveToDownloads,
+          },
+          { text: "Cancel", style: "cancel" },
+        ],
       );
     }
   };
