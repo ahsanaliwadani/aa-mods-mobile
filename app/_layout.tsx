@@ -11,6 +11,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Linking from "expo-linking";
 import Constants from "expo-constants";
+import { Image } from "expo-image";
 import React, { useEffect, useRef } from "react";
 import { Platform, View } from "react-native";
 import { GestureHandlerRootView as _GestureHandlerRootView } from "react-native-gesture-handler";
@@ -44,6 +45,9 @@ const GestureHandlerRootView = _GestureHandlerRootView as unknown as React.Compo
 const isExpoGo = Constants.appOwnership === "expo";
 
 SplashScreen.preventAutoHideAsync();
+
+// Preload app icon into expo-image memory cache before any screen renders
+Image.prefetch(require("@/assets/images/icon.png")).catch(() => {});
 
 initializeOneSignal();
 initializeAdMob();
@@ -104,19 +108,14 @@ function RootLayoutNav() {
   const { shouldShowRating, recordDownload, dismiss: dismissRating, markRated } = useAppRating(config);
   useAppOpenAd();
 
-  // Request Android storage + notification permissions on startup
+  // Request Android notification permission on startup
   useEffect(() => {
     if (Platform.OS !== "android") return;
     try {
       const { PermissionsAndroid } = require("react-native");
-      const perms: string[] = [
-        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-      ];
       if (PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS) {
-        perms.push(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+        PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => {});
       }
-      PermissionsAndroid.requestMultiple(perms).catch(() => {});
     } catch {}
   }, []);
 
@@ -249,7 +248,9 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if (!fontsLoaded && !fontError) {
+    return <View style={{ flex: 1, backgroundColor: "#04131b" }} />;
+  }
 
   return (
     <SafeAreaProvider>
