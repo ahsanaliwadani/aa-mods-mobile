@@ -28,12 +28,23 @@ if (Platform.OS !== "web") {
 // Custom AA Mods notification sound — copied to android/app/src/main/res/raw/ via expo-notifications plugin config
 const AA_MODS_SOUND = "aa_mods_notif";
 
+// Channel IDs — bump the version suffix any time sound/importance settings change
+// so Android recreates them fresh (OS caches channels and ignores updates to existing ones)
+export const CHANNEL_UPDATES = "aa-mods-updates-v2";
+export const CHANNEL_GENERAL = "aa-mods-general-v2";
+export const CHANNEL_CRITICAL = "aa-mods-critical-v2";
+
 // Create Android notification channels — call this early at app start,
 // independently of whether EAS push tokens are available.
 export async function setupNotificationChannels(): Promise<void> {
   if (Platform.OS !== "android") return;
   try {
-    await Notifications.setNotificationChannelAsync("aa-mods-updates", {
+    // Delete old channel versions so the OS doesn't keep stale sound settings
+    await Notifications.deleteNotificationChannelAsync("aa-mods-updates").catch(() => {});
+    await Notifications.deleteNotificationChannelAsync("aa-mods-general").catch(() => {});
+    await Notifications.deleteNotificationChannelAsync("aa-mods-critical").catch(() => {});
+
+    await Notifications.setNotificationChannelAsync(CHANNEL_UPDATES, {
       name: "App Updates",
       description: "Notifications for new and updated mods",
       importance: Notifications.AndroidImportance.HIGH,
@@ -46,7 +57,7 @@ export async function setupNotificationChannels(): Promise<void> {
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     }).catch(() => {});
 
-    await Notifications.setNotificationChannelAsync("aa-mods-general", {
+    await Notifications.setNotificationChannelAsync(CHANNEL_GENERAL, {
       name: "General",
       description: "General AA Mods notifications",
       importance: Notifications.AndroidImportance.DEFAULT,
@@ -55,7 +66,7 @@ export async function setupNotificationChannels(): Promise<void> {
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     }).catch(() => {});
 
-    await Notifications.setNotificationChannelAsync("aa-mods-critical", {
+    await Notifications.setNotificationChannelAsync(CHANNEL_CRITICAL, {
       name: "Critical Alerts",
       description: "Important announcements and mandatory updates",
       importance: Notifications.AndroidImportance.MAX,

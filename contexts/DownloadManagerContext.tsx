@@ -343,7 +343,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
   // ── Strategy 2 (SAF fallback): Write APK to a user-picked SAF directory ──
   // Only used when direct Downloads path is inaccessible (Android 10+ without MANAGE_EXTERNAL_STORAGE).
-  // Creates the dest file via SAF, then writes content as base64 (works for small-medium APKs).
+  // Uses native copyAsync (no memory limit — works for any file size including 200MB+ APKs).
   const writeApkToSafDir = useCallback(async (
     apkPath: string,
     dirUri: string,
@@ -362,6 +362,21 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         "application/vnd.android.package-archive",
       );
 
+      // Primary: native OS-level copy — no JS memory involved, works for any file size
+      try {
+        await FileSystem.copyAsync({ from: apkPath, to: destUri });
+        return destUri;
+      } catch {
+        // copyAsync to content:// not supported on this version — fall back to chunked Base64
+      }
+
+      // Fallback: chunked Base64 write (for smaller APKs where memory allows)
+      const fileInfo = await FileSystem.getInfoAsync(apkPath, { size: true });
+      const fileSizeBytes = (fileInfo as { size?: number }).size ?? 0;
+      // Skip Base64 fallback for files > 40 MB to avoid OOM crash
+      if (fileSizeBytes > 40 * 1024 * 1024) {
+        throw new Error("file_too_large_for_base64_fallback");
+      }
       const content = await FileSystem.readAsStringAsync(apkPath, {
         encoding: FileSystem.EncodingType.Base64,
       });

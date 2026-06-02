@@ -1,6 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+import { CHANNEL_UPDATES, CHANNEL_GENERAL, CHANNEL_CRITICAL } from "@/lib/notifications";
 
 const isExpoGo = Constants.appOwnership === "expo";
 export const canLocalNotify = Platform.OS !== "web" && !isExpoGo;
@@ -41,7 +42,7 @@ export async function notifyDownloadStarted(appName: string, iconUri?: string): 
     body: `Downloading ${appName}…`,
     data: { type: "download_start", appName },
     sound: undefined,
-    ...androidExtra("aa-mods-general"),
+    ...androidExtra(CHANNEL_GENERAL),
     ...(iconUri ? { attachments: [] } : {}),
   });
 }
@@ -59,7 +60,7 @@ export async function notifyDownloadProgress(
     body: `Downloading${sizeStr}`,
     data: { type: "download_progress", appName, progressPct },
     sound: undefined,
-    ...androidExtra("aa-mods-general"),
+    ...androidExtra(CHANNEL_GENERAL),
   });
 }
 
@@ -70,8 +71,8 @@ export async function notifyDownloadFinished(appName: string, version?: string):
       ? `${appName} v${version} is ready to install!`
       : `${appName} is ready to install — tap to open.`,
     data: { type: "download_done", appName },
-    sound: "default",
-    ...androidExtra("aa-mods-updates", "high"),
+    sound: Platform.OS === "ios" ? "aa_mods_notif.wav" : undefined,
+    ...androidExtra(CHANNEL_UPDATES, "high"),
   });
 }
 
@@ -85,8 +86,8 @@ export async function notifyDownloadFailed(
       ? `${appName}: ${error.slice(0, 80)}`
       : `Failed to download ${appName}. Tap to retry.`,
     data: { type: "download_error", appName },
-    sound: "default",
-    ...androidExtra("aa-mods-general", "high"),
+    sound: Platform.OS === "ios" ? "aa_mods_notif.wav" : undefined,
+    ...androidExtra(CHANNEL_GENERAL, "high"),
   });
 }
 
@@ -104,8 +105,8 @@ export async function notifyUpdateAvailable(
     title,
     body,
     data: { type: "update_available", count },
-    sound: "default",
-    ...androidExtra("aa-mods-updates", "high"),
+    sound: Platform.OS === "ios" ? "aa_mods_notif.wav" : undefined,
+    ...androidExtra(CHANNEL_UPDATES, "high"),
   });
 }
 
@@ -117,8 +118,8 @@ export async function notifyNewApp(
     title: "🎉 New Mod Added",
     body: `${appName} (${category}) is now available on AA Mods Store.`,
     data: { type: "new_app", appName },
-    sound: "default",
-    ...androidExtra("aa-mods-updates"),
+    sound: Platform.OS === "ios" ? "aa_mods_notif.wav" : undefined,
+    ...androidExtra(CHANNEL_UPDATES),
   });
 }
 
@@ -135,7 +136,7 @@ export async function notifyInstalledAppsUpdated(
     title,
     body,
     data: { type: "installed_update", count, appNames },
-    sound: "default",
-    ...androidExtra("aa-mods-updates", "high"),
+    sound: Platform.OS === "ios" ? "aa_mods_notif.wav" : undefined,
+    ...androidExtra(CHANNEL_UPDATES, "high"),
   });
 }
