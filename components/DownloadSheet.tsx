@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import {
-  Alert,
   Animated,
   Dimensions,
   Modal,
@@ -24,9 +23,9 @@ export { isDirectApkUrl } from "@/lib/mediafireResolver";
 const TRACK_WIDTH = Dimensions.get("window").width - 80;
 
 export function useDownloadSheet() {
-  const [visible, setVisible] = useState(false);
-  const [currentLink, setCurrentLink] = useState("");
-  const [currentLabel, setCurrentLabel] = useState("");
+  const [visible, setVisible] = React.useState(false);
+  const [currentLink, setCurrentLink] = React.useState("");
+  const [currentLabel, setCurrentLabel] = React.useState("");
 
   const open = useCallback((link: string, label: string) => {
     setCurrentLink(link);
@@ -110,7 +109,6 @@ export function DownloadSheet({
 
   const isActive = phase === "downloading" || phase === "resolving";
 
-  // Always allow closing — download continues in background
   const handleMinimize = useCallback(() => {
     onClose();
   }, [onClose]);
@@ -119,7 +117,6 @@ export function DownloadSheet({
     if (!link) return;
     haptics.medium();
 
-    // On web: open the download URL directly in the browser
     if (Platform.OS === "web") {
       if (typeof window !== "undefined") {
         window.open(link, "_blank");
@@ -138,61 +135,11 @@ export function DownloadSheet({
     await dm.startDownload(appSlug, appName, appVersion, link, iconUri);
   };
 
-  const [saving, setSaving] = useState(false);
-
   const handleInstall = async () => {
     if (!appSlug) return;
     haptics.medium();
     await dm.installApk(appSlug);
     onClose();
-  };
-
-  const openAllFilesAccessSettings = async () => {
-    try {
-      const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
-      await IL.startActivityAsync(
-        "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION",
-        { data: "package:com.aa.mods" },
-      );
-    } catch {
-      try {
-        const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
-        await IL.startActivityAsync("android.settings.APPLICATION_DETAILS_SETTINGS", {
-          data: "package:com.aa.mods",
-        });
-      } catch {}
-    }
-  };
-
-  const handleSaveToStorage = async () => {
-    if (!appSlug) return;
-    haptics.medium();
-    setSaving(true);
-    try {
-      const result = await dm.saveApkToDownloads(appSlug);
-      if (result === "saved") {
-        Alert.alert("Saved!", "APK has been saved to your selected folder.");
-      } else if (result === "error") {
-        Alert.alert(
-          "Save Failed",
-          "Could not save the APK to phone storage.\n\nEither grant 'All files access' permission, or pick a folder manually.",
-          [
-            {
-              text: "Grant All Files Access",
-              onPress: openAllFilesAccessSettings,
-            },
-            {
-              text: "Pick Folder",
-              onPress: handleSaveToStorage,
-            },
-            { text: "Cancel", style: "cancel" },
-          ],
-        );
-      }
-      // "cancelled" = user dismissed folder picker — no alert needed
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleCancel = async () => {
@@ -223,7 +170,6 @@ export function DownloadSheet({
       onRequestClose={handleMinimize}
       statusBarTranslucent
     >
-      {/* Overlay — tap to minimize, download keeps going */}
       <Pressable style={styles.overlay} onPress={handleMinimize}>
         <Pressable style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {/* Handle + minimize row */}
@@ -262,7 +208,7 @@ export function DownloadSheet({
                     ? "Download page will open inside the app — no external browser needed."
                     : isMediaFireUrl(link)
                     ? "MediaFire link detected — will resolve direct APK link and download in-app."
-                    : "APK will download directly inside the app. Tap Install when done."}
+                    : "APK will download and install directly from the app. No file manager needed."}
                 </Text>
               </View>
 
@@ -380,8 +326,8 @@ export function DownloadSheet({
                 <Text style={[styles.doneTitle, { color: colors.foreground }]}>Download Complete!</Text>
                 <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
                   {Platform.OS === "android"
-                    ? "APK is ready. Install it now or save to phone storage."
-                    : "APK downloaded to AAMods folder."}
+                    ? "APK is ready. Tap Install to install it now."
+                    : "APK downloaded successfully."}
                 </Text>
               </View>
 
@@ -400,25 +346,6 @@ export function DownloadSheet({
                 </Pressable>
               )}
 
-              {Platform.OS === "android" && apkPath &&
-                !apkPath.startsWith("content://") &&
-                !apkPath.includes("/storage/emulated/0/Download") &&
-                !apkPath.includes("/sdcard/Download") && (
-                <Pressable
-                  onPress={handleSaveToStorage}
-                  disabled={saving}
-                  style={({ pressed }) => [
-                    styles.secondaryBtn,
-                    { borderColor: "rgba(251,191,36,0.4)", opacity: pressed || saving ? 0.7 : 1 },
-                  ]}
-                >
-                  <Ionicons name="folder-open-outline" size={16} color="#fbbf24" />
-                  <Text style={[styles.secondaryBtnText, { color: "#fbbf24" }]}>
-                    {saving ? "Saving…" : "Save to Phone Storage"}
-                  </Text>
-                </Pressable>
-              )}
-
               <Pressable onPress={handleMinimize} style={[styles.cancelBtn, { borderColor: colors.border }]}>
                 <Text style={[styles.cancelText, { color: colors.mutedForeground }]}>Close</Text>
               </Pressable>
@@ -433,7 +360,7 @@ export function DownloadSheet({
                 </View>
                 <Text style={[styles.doneTitle, { color: "#22d3ee" }]}>App Installed!</Text>
                 <Text style={[styles.progressSub, { color: colors.mutedForeground }]}>
-                  APK is saved on your device. You can reinstall at any time without re-downloading.
+                  APK is saved in the app. You can reinstall at any time without re-downloading.
                 </Text>
               </View>
 
@@ -448,25 +375,6 @@ export function DownloadSheet({
                   <Ionicons name="refresh-circle" size={20} color="#0a0a0a" />
                   <Text style={[styles.primaryBtnText, { color: "#0a0a0a" }]}>
                     Reinstall APK
-                  </Text>
-                </Pressable>
-              )}
-
-              {Platform.OS === "android" && apkPath &&
-                !apkPath.startsWith("content://") &&
-                !apkPath.includes("/storage/emulated/0/Download") &&
-                !apkPath.includes("/sdcard/Download") && (
-                <Pressable
-                  onPress={handleSaveToStorage}
-                  disabled={saving}
-                  style={({ pressed }) => [
-                    styles.secondaryBtn,
-                    { borderColor: "rgba(251,191,36,0.4)", opacity: pressed || saving ? 0.7 : 1 },
-                  ]}
-                >
-                  <Ionicons name="folder-open-outline" size={16} color="#fbbf24" />
-                  <Text style={[styles.secondaryBtnText, { color: "#fbbf24" }]}>
-                    {saving ? "Saving…" : "Save to Phone Storage"}
                   </Text>
                 </Pressable>
               )}
@@ -580,23 +488,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 14,
-    marginTop: 4,
+    padding: 12,
   },
-  infoText: { flex: 1, fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
+  infoText: { flex: 1, fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 18 },
   primaryBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
     borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    marginTop: 4,
+    paddingVertical: 15,
   },
-  primaryBtnText: { fontSize: 16, fontWeight: "800", letterSpacing: 0.3, fontFamily: "Inter_700Bold" },
+  primaryBtnText: { fontSize: 16, fontWeight: "700", fontFamily: "Inter_700Bold" },
   secondaryBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -612,20 +517,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 14,
     borderWidth: 1,
-    paddingVertical: 13,
+    paddingVertical: 12,
   },
   cancelText: { fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  centerArea: { alignItems: "center", gap: 10, paddingVertical: 10, width: "100%" },
+  centerArea: { alignItems: "center", gap: 8, paddingVertical: 8 },
   resolveIconBox: {
-    width: 64,
-    height: 64,
+    width: 60,
+    height: 60,
     borderRadius: 18,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
     marginBottom: 4,
   },
-  rowBtns: { flexDirection: "row", gap: 10, width: "100%", marginTop: 4 },
+  progressLabel: { fontSize: 16, fontWeight: "700", fontFamily: "Inter_700Bold", textAlign: "center" },
+  progressSub: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", opacity: 0.7 },
+  progressHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", width: TRACK_WIDTH },
+  speedText: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
+  progressTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 3 },
+  progressMetaRow: { flexDirection: "row", justifyContent: "space-between", width: TRACK_WIDTH },
+  rowBtns: { flexDirection: "row", gap: 10, marginTop: 4, width: "100%" },
   halfBtn: {
     flex: 1,
     flexDirection: "row",
@@ -637,24 +549,6 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   halfBtnText: { fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  progressHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-    paddingHorizontal: 4,
-  },
-  progressLabel: { fontSize: 16, fontWeight: "700", fontFamily: "Inter_700Bold" },
-  speedText: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold" },
-  progressTrack: { height: 8, borderRadius: 4, overflow: "hidden", marginVertical: 4 },
-  progressFill: { height: "100%", borderRadius: 4 },
-  progressMetaRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-    paddingHorizontal: 4,
-  },
-  progressSub: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", paddingHorizontal: 4 },
   doneCircle: {
     width: 72,
     height: 72,
@@ -663,5 +557,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 4,
   },
-  doneTitle: { fontSize: 18, fontWeight: "800", fontFamily: "Inter_700Bold" },
+  doneTitle: { fontSize: 20, fontWeight: "800", fontFamily: "Inter_700Bold", textAlign: "center" },
 });

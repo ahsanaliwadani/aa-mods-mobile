@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Alert,
   Platform,
@@ -18,6 +18,7 @@ import { haptics } from "@/lib/haptics";
 import { logScreenView } from "@/lib/analytics";
 import { AdBanner } from "@/components/AdBanner";
 import { useRewardedAd } from "@/hooks/useRewardedAd";
+
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "";
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -35,30 +36,6 @@ function formatEta(bytesLeft: number, speedBps: number): string {
   const secs = Math.ceil(bytesLeft / speedBps);
   if (secs < 60) return `~${secs}s`;
   return `~${Math.ceil(secs / 60)}m`;
-}
-
-function formatBoostCountdown(until: number): string {
-  const ms = Math.max(0, until - Date.now());
-  const mins = Math.floor(ms / 60000);
-  const secs = Math.floor((ms % 60000) / 1000);
-  return `${mins}m ${secs}s`;
-}
-
-function isApkInPhoneStorage(apkPath: string): boolean {
-  return (
-    apkPath.startsWith("content://") ||
-    apkPath.includes("/storage/emulated/0/Download")
-  );
-}
-
-function getDisplayPath(apkPath: string): string {
-  if (!apkPath) return "";
-  if (apkPath.startsWith("content://")) return "Saved via folder picker";
-  try {
-    const idx = apkPath.indexOf("/Download/");
-    if (idx !== -1) return apkPath.substring(idx + 1);
-  } catch {}
-  return apkPath.split("/").pop() ?? apkPath;
 }
 
 function formatHistoryDate(ts: number): string {
@@ -111,7 +88,6 @@ function DownloadCard({
 }) {
   const colors = useColors();
   const dm = useDownloadManager();
-  const [saving, setSaving] = useState(false);
 
   const isActive = entry.phase === "downloading" || entry.phase === "resolving";
   const isDone = entry.phase === "done";
@@ -172,74 +148,6 @@ function DownloadCard({
     ? "rgba(0,230,115,0.2)"
     : colors.border;
 
-  const handleOpenFileManager = async () => {
-    if (Platform.OS !== "android") return;
-    haptics.light();
-    try {
-      const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
-      const folderUri = (entry.apkPath ?? "").includes("/Download/AAMods/")
-        ? "content://com.android.externalstorage.documents/document/primary%3ADownload%2FAAMods"
-        : "content://com.android.externalstorage.documents/document/primary%3ADownload";
-      await IL.startActivityAsync("android.intent.action.VIEW", {
-        data: folderUri,
-        type: "vnd.android.document/directory",
-        flags: 1,
-      });
-    } catch {
-      Alert.alert(
-        "Open File Manager",
-        "Open your file manager app and navigate to:\nInternal Storage → Download → AAMods",
-      );
-    }
-  };
-
-  const openAllFilesAccessSettings = async () => {
-    try {
-      const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
-      await IL.startActivityAsync(
-        "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION",
-        { data: "package:com.aa.mods" },
-      );
-    } catch {
-      try {
-        const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
-        await IL.startActivityAsync("android.settings.APPLICATION_DETAILS_SETTINGS", {
-          data: "package:com.aa.mods",
-        });
-      } catch {}
-    }
-  };
-
-  const handleSaveToDownloads = async () => {
-    setSaving(true);
-    haptics.medium();
-    const result = await dm.saveApkToDownloads(entry.slug);
-    setSaving(false);
-    if (result === "saved") {
-      haptics.medium();
-      Alert.alert(
-        "Saved to Phone Storage ✓",
-        "APK saved to Downloads/AAMods — open your file manager to find it.",
-      );
-    } else if (result === "error") {
-      Alert.alert(
-        "Save Failed",
-        "Could not save the APK to phone storage.\n\nEither grant 'All files access' permission, or pick a folder manually.",
-        [
-          {
-            text: "Grant All Files Access",
-            onPress: openAllFilesAccessSettings,
-          },
-          {
-            text: "Pick Folder",
-            onPress: handleSaveToDownloads,
-          },
-          { text: "Cancel", style: "cancel" },
-        ],
-      );
-    }
-  };
-
   return (
     <Pressable
       onPress={() => { haptics.light(); onPress(); }}
@@ -295,20 +203,6 @@ function DownloadCard({
               style={[styles.actionBtn, { backgroundColor: "rgba(0,230,115,0.1)", borderColor: "rgba(0,230,115,0.3)" }]}
             >
               <Ionicons name="refresh" size={14} color={colors.primary} />
-            </Pressable>
-          )}
-
-          {Platform.OS === "android" && isFinished && entry.apkPath &&
-            !entry.apkPath.startsWith("content://") &&
-            !entry.apkPath.includes("/storage/emulated/0/Download") &&
-            !entry.apkPath.includes("/sdcard/Download") && (
-            <Pressable
-              onPress={handleSaveToDownloads}
-              hitSlop={8}
-              disabled={saving}
-              style={[styles.actionBtn, { backgroundColor: entry.needsManualSave ? "rgba(251,191,36,0.2)" : "rgba(251,191,36,0.1)", borderColor: entry.needsManualSave ? "rgba(251,191,36,0.6)" : "rgba(251,191,36,0.35)", opacity: saving ? 0.5 : 1 }]}
-            >
-              <Ionicons name="folder-open-outline" size={14} color="#fbbf24" />
             </Pressable>
           )}
 
@@ -379,44 +273,8 @@ function DownloadCard({
         <View style={[styles.installedBadge, { backgroundColor: "rgba(34,211,238,0.08)", borderColor: "rgba(34,211,238,0.2)" }]}>
           <Ionicons name="checkmark-done-circle" size={12} color="#22d3ee" />
           <Text style={[styles.installedBadgeText, { color: "#22d3ee" }]}>
-            APK is saved on device — tap Reinstall any time
+            APK saved in app — tap Reinstall any time
           </Text>
-        </View>
-      )}
-
-      {/* Auto-save failed — prompt user to save manually */}
-      {Platform.OS === "android" && isFinished && entry.needsManualSave && (
-        <Pressable
-          onPress={handleSaveToDownloads}
-          disabled={saving}
-          style={[styles.saveWarningBanner, { opacity: saving ? 0.6 : 1 }]}
-        >
-          <Ionicons name="warning-outline" size={13} color="#fbbf24" />
-          <Text style={styles.saveWarningText}>
-            {saving ? "Saving to phone storage…" : "Tap to save APK to phone storage (Downloads/AAMods)"}
-          </Text>
-          <Ionicons name="chevron-forward" size={13} color="#fbbf24" />
-        </Pressable>
-      )}
-
-      {/* Saved to phone storage indicator */}
-      {Platform.OS === "android" && isFinished && entry.apkPath && isApkInPhoneStorage(entry.apkPath) && (
-        <View style={[styles.savedBadge, { backgroundColor: "rgba(0,230,115,0.07)", borderColor: "rgba(0,230,115,0.18)" }]}>
-          <Ionicons name="folder" size={14} color={colors.primary} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.savedBadgeTitle, { color: colors.primary }]}>Saved to Phone Storage ✓</Text>
-            <Text style={[styles.savedBadgePath, { color: colors.mutedForeground }]} numberOfLines={1} ellipsizeMode="middle">
-              {getDisplayPath(entry.apkPath)}
-            </Text>
-          </View>
-          <Pressable
-            onPress={handleOpenFileManager}
-            hitSlop={8}
-            style={[styles.openFolderBtn, { backgroundColor: "rgba(0,230,115,0.14)", borderColor: "rgba(0,230,115,0.32)" }]}
-          >
-            <Ionicons name="folder-open-outline" size={12} color={colors.primary} />
-            <Text style={[styles.openFolderBtnText, { color: colors.primary }]}>Open</Text>
-          </Pressable>
         </View>
       )}
 
@@ -504,7 +362,7 @@ export default function DownloadsScreen() {
             <Pressable
               onPress={() => {
                 haptics.medium();
-                Alert.alert("Clear All", "This will remove all completed downloads and their APK files from device storage. Installed apps will remain on your phone.", [
+                Alert.alert("Clear All", "This will remove all completed downloads and their APK files. Installed apps will remain on your phone.", [
                   { text: "Cancel", style: "cancel" },
                   { text: "Clear All", style: "destructive", onPress: () => dm.clearAllCompleted() },
                 ]);
@@ -767,7 +625,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginBottom: 2,
   },
-  clearBtnText: { fontSize: 12, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   scroll: { padding: 16, gap: 8 },
   section: { gap: 8, marginBottom: 8 },
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 },
@@ -831,23 +688,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   sizeMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
-  saveWarningBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(251,191,36,0.45)",
-    backgroundColor: "rgba(251,191,36,0.08)",
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  saveWarningText: {
-    flex: 1,
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#fbbf24",
-  },
   installedBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -858,30 +698,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   installedBadgeText: { fontSize: 11, fontFamily: "Inter_400Regular", flex: 1 },
-  savedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  savedBadgeTitle: { fontSize: 11, fontWeight: "700", fontFamily: "Inter_700Bold" },
-  savedBadgePath: { fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 1 },
-  openFolderBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  openFolderBtnText: { fontSize: 10, fontWeight: "700", fontFamily: "Inter_700Bold" },
   errorText: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 17 },
   emptyOuter: { flex: 1 },
-  emptyBoostWrap: { paddingHorizontal: 16, paddingTop: 16 },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 },
   emptyIconWrap: {
     width: 88,

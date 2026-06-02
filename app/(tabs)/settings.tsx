@@ -536,34 +536,6 @@ export default function SettingsScreen() {
       .catch(() => {});
   }, []);
 
-  const [pickingDir, setPickingDir] = useState(false);
-
-  const downloadDirLabel = (() => {
-    if (!dm.downloadDirUri) return "Internal app storage (default)";
-    try {
-      const decoded = decodeURIComponent(dm.downloadDirUri);
-      const parts = decoded.split("/").filter(Boolean);
-      const name = parts[parts.length - 1] ?? "Custom folder";
-      return name.replace(/:/g, "/");
-    } catch {
-      return "Custom folder selected";
-    }
-  })();
-
-  const handlePickDownloadDir = async () => {
-    if (Platform.OS !== "android") return;
-    setPickingDir(true);
-    haptics.medium();
-    try {
-      const uri = await dm.pickDownloadDir();
-      if (uri) {
-        Alert.alert("Folder Selected", "Future downloads will be saved to this folder using the 'Save to Folder' button in the Downloads screen.");
-      }
-    } finally {
-      setPickingDir(false);
-    }
-  };
-
   const handleAppPress = (slug: string) => { haptics.light(); router.push(`/app/${slug}`); };
 
   return (
@@ -691,29 +663,6 @@ export default function SettingsScreen() {
             value={prefs.wifiOnlyDownloads}
             onToggle={(v) => savePrefs({ wifiOnlyDownloads: v })}
           />
-          {Platform.OS === "android" && (
-            <SettingRow
-              icon="folder-open-outline"
-              iconColor="#f59e0b"
-              label="Download Folder"
-              sub={pickingDir ? "Picking folder…" : downloadDirLabel}
-              onPress={pickingDir ? undefined : handlePickDownloadDir}
-              disabled={pickingDir}
-              trailing={
-                dm.downloadDirUri ? (
-                  <Pressable
-                    onPress={() => { haptics.selection(); dm.setDownloadDir(null); }}
-                    hitSlop={10}
-                    style={[sStyles.resetDirBtn, { borderColor: colors.border }]}
-                  >
-                    <Text style={[sStyles.resetDirText, { color: colors.mutedForeground }]}>Reset</Text>
-                  </Pressable>
-                ) : (
-                  <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
-                )
-              }
-            />
-          )}
           <SettingRow
             icon="folder-outline"
             iconColor="#f59e0b"
@@ -1060,6 +1009,4 @@ const sStyles = StyleSheet.create({
   aboutFooter: { fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", padding: 14, lineHeight: 17 },
   inboxBadge: { borderRadius: 10, minWidth: 20, height: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
   inboxBadgeText: { color: "#04131b", fontSize: 10, fontWeight: "800", fontFamily: "Inter_700Bold" },
-  resetDirBtn: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5 },
-  resetDirText: { fontSize: 11, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
 });
