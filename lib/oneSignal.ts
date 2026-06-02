@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 import * as Linking from "expo-linking";
 import { OneSignal, LogLevel, type NotificationWillDisplayEvent, type NotificationClickEvent } from "react-native-onesignal";
 
-const APP_ID = "c0dd2a7a-37c7-450e-89a0-08c8ec3f446d";
+const APP_ID = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID ?? "";
 
 let _initialized = false;
 
@@ -16,9 +16,6 @@ type InboxAddFn = (item: {
 
 let _inboxCallback: InboxAddFn | null = null;
 
-// Track notification IDs already added to inbox via foregroundWillDisplay so
-// the click handler doesn't add a duplicate when the user taps the notification
-// while the app is in the foreground.
 const _foregroundAddedIds = new Set<string>();
 
 export function setInboxCallback(cb: InboxAddFn | null): void {
@@ -57,7 +54,6 @@ export function initializeOneSignal(): void {
         undefined;
       const notifId: string = (raw.notificationId as string | undefined) ?? "";
 
-      // Mark as added so click handler skips the duplicate
       if (notifId) _foregroundAddedIds.add(notifId);
 
       addToInbox(title, body, data, imageUrl);
@@ -77,7 +73,6 @@ export function initializeOneSignal(): void {
           undefined;
         const notifId: string = (raw.notificationId as string | undefined) ?? "";
 
-        // Only add to inbox if this notification was NOT already added in foreground
         if (notifId && _foregroundAddedIds.has(notifId)) {
           _foregroundAddedIds.delete(notifId);
         } else {
