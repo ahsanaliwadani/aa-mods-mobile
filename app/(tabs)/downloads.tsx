@@ -300,12 +300,13 @@ function DownloadCard({
 
           {Platform.OS === "android" && isFinished && entry.apkPath &&
             !entry.apkPath.startsWith("content://") &&
-            !entry.apkPath.includes("/storage/emulated/0/Download") && (
+            !entry.apkPath.includes("/storage/emulated/0/Download") &&
+            !entry.apkPath.includes("/sdcard/Download") && (
             <Pressable
               onPress={handleSaveToDownloads}
               hitSlop={8}
               disabled={saving}
-              style={[styles.actionBtn, { backgroundColor: "rgba(251,191,36,0.1)", borderColor: "rgba(251,191,36,0.35)", opacity: saving ? 0.5 : 1 }]}
+              style={[styles.actionBtn, { backgroundColor: entry.needsManualSave ? "rgba(251,191,36,0.2)" : "rgba(251,191,36,0.1)", borderColor: entry.needsManualSave ? "rgba(251,191,36,0.6)" : "rgba(251,191,36,0.35)", opacity: saving ? 0.5 : 1 }]}
             >
               <Ionicons name="folder-open-outline" size={14} color="#fbbf24" />
             </Pressable>
@@ -381,6 +382,21 @@ function DownloadCard({
             APK is saved on device — tap Reinstall any time
           </Text>
         </View>
+      )}
+
+      {/* Auto-save failed — prompt user to save manually */}
+      {Platform.OS === "android" && isFinished && entry.needsManualSave && (
+        <Pressable
+          onPress={handleSaveToDownloads}
+          disabled={saving}
+          style={[styles.saveWarningBanner, { opacity: saving ? 0.6 : 1 }]}
+        >
+          <Ionicons name="warning-outline" size={13} color="#fbbf24" />
+          <Text style={styles.saveWarningText}>
+            {saving ? "Saving to phone storage…" : "Tap to save APK to phone storage (Downloads/AAMods)"}
+          </Text>
+          <Ionicons name="chevron-forward" size={13} color="#fbbf24" />
+        </Pressable>
       )}
 
       {/* Saved to phone storage indicator */}
@@ -815,6 +831,23 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   sizeMeta: { fontSize: 11, fontFamily: "Inter_400Regular" },
+  saveWarningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.45)",
+    backgroundColor: "rgba(251,191,36,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  saveWarningText: {
+    flex: 1,
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#fbbf24",
+  },
   installedBadge: {
     flexDirection: "row",
     alignItems: "center",

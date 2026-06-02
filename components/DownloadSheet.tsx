@@ -400,7 +400,10 @@ export function DownloadSheet({
                 </Pressable>
               )}
 
-              {Platform.OS === "android" && apkPath && !apkPath.startsWith("content://") && (
+              {Platform.OS === "android" && apkPath &&
+                !apkPath.startsWith("content://") &&
+                !apkPath.includes("/storage/emulated/0/Download") &&
+                !apkPath.includes("/sdcard/Download") && (
                 <Pressable
                   onPress={handleSaveToStorage}
                   disabled={saving}
@@ -449,7 +452,10 @@ export function DownloadSheet({
                 </Pressable>
               )}
 
-              {Platform.OS === "android" && apkPath && !apkPath.startsWith("content://") && (
+              {Platform.OS === "android" && apkPath &&
+                !apkPath.startsWith("content://") &&
+                !apkPath.includes("/storage/emulated/0/Download") &&
+                !apkPath.includes("/sdcard/Download") && (
                 <Pressable
                   onPress={handleSaveToStorage}
                   disabled={saving}

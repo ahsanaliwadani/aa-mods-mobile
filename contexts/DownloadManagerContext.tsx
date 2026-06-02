@@ -77,6 +77,8 @@ export type DownloadEntry = {
   apkPath?: string;
   error?: string;
   startedAt: number;
+  /** true when download finished but auto-save to public storage failed — user should tap Save */
+  needsManualSave?: boolean;
 };
 
 export type InstalledApp = {
@@ -314,8 +316,8 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
   }, [setDownloadDir]);
 
   // ── Strategy 1: Direct file:// → file:// copy to public Downloads/AAMods folder ──
-  // This is a native OS-level copy with zero JS bridge involvement — works for any file size.
-  // Requires WRITE_EXTERNAL_STORAGE (Android < 10) or MANAGE_EXTERNAL_STORAGE (Android 10+).
+  // Native OS-level copy — no JS memory involved, any file size.
+  // Works when MANAGE_EXTERNAL_STORAGE is granted (Android 10+) or on Android < 10.
   const tryCopyToPublicDownloads = useCallback(async (
     apkPath: string,
     fileName: string,
@@ -329,22 +331,34 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
         const dirPath = destPath.substring(0, destPath.lastIndexOf("/") + 1);
         await FileSystem.makeDirectoryAsync(dirPath, { intermediates: true }).catch(() => {});
         await FileSystem.copyAsync({ from: apkPath, to: destPath });
+        // Verify copy succeeded — size must be > 0 and match source
+        const srcInfo = await FileSystem.getInfoAsync(apkPath, { size: true }).catch(() => null);
+        const dstInfo = await FileSystem.getInfoAsync(destPath, { size: true }).catch(() => null);
+        const srcSize = (srcInfo as { size?: number } | null)?.size ?? 0;
+        const dstSize = (dstInfo as { size?: number } | null)?.size ?? 0;
+        if (dstSize === 0 || (srcSize > 0 && dstSize !== srcSize)) {
+          await FileSystem.deleteAsync(destPath, { idempotent: true }).catch(() => {});
+          return null;
+        }
         return destPath;
       } catch {
         return null;
       }
     };
 
-    // Try AAMods subfolder in Downloads first, then root Downloads
+    // Try multiple paths — covers different Android device layouts
     return (
       (await tryPath(`file:///storage/emulated/0/Download/AAMods/${fileName}`)) ??
-      (await tryPath(`file:///storage/emulated/0/Download/${fileName}`))
+      (await tryPath(`file:///sdcard/Download/AAMods/${fileName}`)) ??
+      (await tryPath(`file:///storage/emulated/0/Download/${fileName}`)) ??
+      (await tryPath(`file:///sdcard/Download/${fileName}`))
     );
   }, []);
 
-  // ── Strategy 2 (SAF fallback): Write APK to a user-picked SAF directory ──
-  // Only used when direct Downloads path is inaccessible (Android 10+ without MANAGE_EXTERNAL_STORAGE).
-  // Uses native copyAsync (no memory limit — works for any file size including 200MB+ APKs).
+  // ── Strategy 2 (SAF): Write APK to a user-picked SAF directory ──
+  // Used when direct Downloads path is inaccessible (Android 10+ without MANAGE_EXTERNAL_STORAGE).
+  // Primary method: native OS stream copy via ContentResolver — works for ANY file size.
+  // Fallback method: Base64 read/write (only for small APKs <60 MB).
   const writeApkToSafDir = useCallback(async (
     apkPath: string,
     dirUri: string,
@@ -354,29 +368,38 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     const SAF = FileSystem.StorageAccessFramework;
     let destUri: string | null = null;
     try {
-      const info = await FileSystem.getInfoAsync(apkPath);
-      if (!info.exists) return null;
+      const srcInfo = await FileSystem.getInfoAsync(apkPath, { size: true });
+      if (!srcInfo.exists) return null;
+      const srcSize = (srcInfo as { size?: number }).size ?? 0;
 
       destUri = await SAF.createFileAsync(
         dirUri,
         fileName,
         "application/vnd.android.package-archive",
       );
+      if (!destUri) throw new Error("saf_create_failed");
 
-      // Primary: native OS-level copy — no JS memory involved, works for any file size
+      // ── Attempt 1: Native stream copy via FileSystem.copyAsync ──
+      // Uses ContentResolver.openOutputStream(contentUri) → no JS memory, any file size.
+      let copyOk = false;
       try {
         await FileSystem.copyAsync({ from: apkPath, to: destUri });
-        return destUri;
+        // Verify the destination file was written correctly
+        const dstInfo = await FileSystem.getInfoAsync(destUri, { size: true }).catch(() => null);
+        const dstSize = (dstInfo as { size?: number } | null)?.size ?? 0;
+        if (dstSize > 0 && (srcSize === 0 || dstSize === srcSize)) {
+          copyOk = true;
+        }
       } catch {
-        // copyAsync to content:// not supported on this version — fall back to chunked Base64
+        // copyAsync to content:// may not be supported on this device/version
       }
 
-      // Fallback: chunked Base64 write (for smaller APKs where memory allows)
-      const fileInfo = await FileSystem.getInfoAsync(apkPath, { size: true });
-      const fileSizeBytes = (fileInfo as { size?: number }).size ?? 0;
-      // Skip Base64 fallback for files > 40 MB to avoid OOM crash
-      if (fileSizeBytes > 40 * 1024 * 1024) {
-        throw new Error("file_too_large_for_base64_fallback");
+      if (copyOk) return destUri;
+
+      // ── Attempt 2: Base64 read/write — only for APKs ≤ 60 MB ──
+      // Skip for large files to avoid OOM crash.
+      if (srcSize > 60 * 1024 * 1024) {
+        throw new Error("file_too_large_and_stream_copy_failed");
       }
       const content = await FileSystem.readAsStringAsync(apkPath, {
         encoding: FileSystem.EncodingType.Base64,
@@ -385,6 +408,10 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       await FileSystem.writeAsStringAsync(destUri, content, {
         encoding: FileSystem.EncodingType.Base64,
       });
+      // Verify Base64 write
+      const dstInfo2 = await FileSystem.getInfoAsync(destUri, { size: true }).catch(() => null);
+      const dstSize2 = (dstInfo2 as { size?: number } | null)?.size ?? 0;
+      if (dstSize2 === 0) throw new Error("base64_write_produced_empty_file");
       return destUri;
     } catch {
       if (destUri) FileSystem.deleteAsync(destUri, { idempotent: true }).catch(() => {});
@@ -392,10 +419,11 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     }
   }, []);
 
-  // Returns true if the APK is already saved in phone-accessible storage
+  // Returns true if the APK is already saved in phone-accessible public storage
   const isInPhoneStorage = (apkPath: string): boolean =>
     apkPath.startsWith("content://") ||
     apkPath.includes("/storage/emulated/0/Download") ||
+    apkPath.includes("/sdcard/Download") ||
     apkPath.includes("/storage/emulated/0/Android/data");
 
   const updateEntry = useCallback((slug: string, patch: Partial<DownloadEntry>) => {
@@ -422,7 +450,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     // Strategy 1: Direct copy to public Downloads folder (file:// → file://, any file size)
     const publicPath = await tryCopyToPublicDownloads(apkPath, fileName);
     if (publicPath) {
-      updateEntry(slug, { apkPath: publicPath });
+      updateEntry(slug, { apkPath: publicPath, needsManualSave: false });
       return "saved";
     }
 
@@ -431,7 +459,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     if (currentDir) {
       const destUri = await writeApkToSafDir(apkPath, currentDir, fileName);
       if (destUri) {
-        updateEntry(slug, { apkPath: destUri });
+        updateEntry(slug, { apkPath: destUri, needsManualSave: false });
         return "saved";
       }
       setDownloadDir(null);
@@ -446,7 +474,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
       setDownloadDir(newUri);
       const destUri = await writeApkToSafDir(apkPath, newUri, fileName);
       if (destUri) {
-        updateEntry(slug, { apkPath: destUri });
+        updateEntry(slug, { apkPath: destUri, needsManualSave: false });
         return "saved";
       }
       // Write failed even with fresh permission — clear saved dir so next
@@ -779,22 +807,27 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
 
           // ── Auto-save to phone storage (always attempted on Android) ──
           let finalApkPath = result.uri;
+          let savedToPhone = false;
           if (Platform.OS === "android") {
             const permFileName = `${safeName}_v${storeVersion}.apk`;
 
             // Strategy 1: direct file:// → file:// copy to Downloads/AAMods (any file size)
+            // Works when MANAGE_EXTERNAL_STORAGE is granted (Android 10+) or on Android < 10.
             const publicPath = await tryCopyToPublicDownloads(result.uri, permFileName);
             if (publicPath) {
               await deleteApkFile(result.uri).catch(() => {});
               finalApkPath = publicPath;
+              savedToPhone = true;
             } else {
-              // Strategy 2: SAF fallback — only if folder was pre-selected by user
+              // Strategy 2: SAF stream copy — uses ContentResolver.openOutputStream,
+              // no JS memory involved, works for ANY file size including 200 MB+.
               const savedDirUri = downloadDirUriRef.current;
               if (savedDirUri) {
                 const permUri = await writeApkToSafDir(result.uri, savedDirUri, permFileName).catch(() => null);
                 if (permUri) {
                   await deleteApkFile(result.uri).catch(() => {});
                   finalApkPath = permUri;
+                  savedToPhone = true;
                 }
               }
             }
@@ -804,6 +837,7 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
             phase: "done",
             progress: 100,
             apkPath: finalApkPath,
+            needsManualSave: Platform.OS === "android" && !savedToPhone,
           });
 
           addToHistory(slug, "downloaded");
