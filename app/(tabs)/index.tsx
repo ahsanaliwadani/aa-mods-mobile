@@ -63,7 +63,7 @@ function getCategoryIcon(category: string, color: string, size = 14) {
   }
 }
 
-function FeaturedCard({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () => void }) {
+const FeaturedCard = React.memo(function FeaturedCard({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () => void }) {
   const colors = useColors();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -95,7 +95,7 @@ function FeaturedCard({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () 
       </Pressable>
     </Animated.View>
   );
-}
+});
 
 const featStyles = StyleSheet.create({
   card: { width: 120, borderRadius: 18, borderWidth: 1, padding: 14, alignItems: "center" },
@@ -696,6 +696,14 @@ export default function HomeScreen() {
     logScreenView("home");
   }, []);
 
+  const categoryCounts = useMemo(() => {
+    const map = new Map<string, number>([["All", apps.length]]);
+    for (const app of apps) {
+      map.set(app.category, (map.get(app.category) ?? 0) + 1);
+    }
+    return map;
+  }, [apps]);
+
   const filteredApps = useMemo(() => {
     let list = activeCategory === "All" ? apps : apps.filter((app) => app.category === activeCategory);
     switch (sortKey) {
@@ -736,11 +744,11 @@ export default function HomeScreen() {
     router.push(`/app/${app.slug}`);
   }, [router]);
 
-  const handleCategoryPress = (cat: string) => {
+  const handleCategoryPress = useCallback((cat: string) => {
     haptics.selection();
     setActiveCategory(cat);
     logCategoryFilter(cat);
-  };
+  }, []);
 
   const handleSortCycle = () => {
     haptics.selection();
@@ -853,7 +861,7 @@ export default function HomeScreen() {
         >
           {categories.map((cat) => {
             const isActive = activeCategory === cat;
-            const count = cat === "All" ? apps.length : apps.filter((a) => a.category === cat).length;
+            const count = categoryCounts.get(cat) ?? 0;
             return (
               <Pressable
                 key={cat}
@@ -890,6 +898,10 @@ export default function HomeScreen() {
         }}
         contentContainerStyle={[styles.listContent, { paddingBottom: Platform.OS === "web" ? 34 + 84 : insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
+        initialNumToRender={6}
+        maxToRenderPerBatch={8}
+        windowSize={10}
+        removeClippedSubviews={Platform.OS === "android"}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
         }

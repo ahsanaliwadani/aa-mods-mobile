@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const FAVORITES_KEY = "@aa_mods_favorites_v2";
@@ -76,19 +76,19 @@ export function UserDataProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.removeItem(RECENT_KEY).catch(() => {});
   }, []);
 
+  const value = useMemo(() => ({
+    favorites,
+    toggleFavorite,
+    isFavorite,
+    clearFavorites,
+    recentSlugs,
+    addRecentlyViewed,
+    clearRecentlyViewed,
+    loaded,
+  }), [favorites, toggleFavorite, isFavorite, clearFavorites, recentSlugs, addRecentlyViewed, clearRecentlyViewed, loaded]);
+
   return (
-    <UserDataContext.Provider
-      value={{
-        favorites,
-        toggleFavorite,
-        isFavorite,
-        clearFavorites,
-        recentSlugs,
-        addRecentlyViewed,
-        clearRecentlyViewed,
-        loaded,
-      }}
-    >
+    <UserDataContext.Provider value={value}>
       {children}
     </UserDataContext.Provider>
   );

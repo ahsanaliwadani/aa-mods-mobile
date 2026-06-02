@@ -28,7 +28,7 @@ const MAX_RECENT = 8;
 const normalizeSearch = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
-function SearchResultRow({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () => void }) {
+const SearchResultRow = React.memo(function SearchResultRow({ app, onPress }: { app: LiveStoreCatalogApp; onPress: () => void }) {
   const colors = useColors();
   return (
     <Pressable
@@ -65,7 +65,7 @@ function SearchResultRow({ app, onPress }: { app: LiveStoreCatalogApp; onPress: 
       </View>
     </Pressable>
   );
-}
+});
 
 export default function SearchScreen() {
   const colors = useColors();
@@ -263,6 +263,10 @@ export default function SearchScreen() {
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={8}
+        removeClippedSubviews={Platform.OS === "android"}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
         }

@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -1070,35 +1071,35 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
     });
   }, []);
 
+  const ctxValue = useMemo(() => ({
+    downloads,
+    isRestoreComplete,
+    speedBoostUntil,
+    isSpeedBoosted,
+    activateSpeedBoost,
+    startDownload,
+    installApk,
+    cancelDownload,
+    retryDownload,
+    clearEntry,
+    clearAllCompleted,
+    getEntry,
+    saveApkToDownloads,
+    installedApps,
+    markInstalled,
+    isInstalled,
+    getInstalledVersion,
+    hasUpdate,
+    clearInstalledApp,
+    downloadDirUri,
+    setDownloadDir,
+    pickDownloadDir,
+    downloadHistory,
+    clearHistory,
+  }), [downloads, isRestoreComplete, speedBoostUntil, isSpeedBoosted, activateSpeedBoost, startDownload, installApk, cancelDownload, retryDownload, clearEntry, clearAllCompleted, getEntry, saveApkToDownloads, installedApps, markInstalled, isInstalled, getInstalledVersion, hasUpdate, clearInstalledApp, downloadDirUri, setDownloadDir, pickDownloadDir, downloadHistory, clearHistory]);
+
   return (
-    <DownloadManagerContext.Provider
-      value={{
-        downloads,
-        isRestoreComplete,
-        speedBoostUntil,
-        isSpeedBoosted,
-        activateSpeedBoost,
-        startDownload,
-        installApk,
-        cancelDownload,
-        retryDownload,
-        clearEntry,
-        clearAllCompleted,
-        getEntry,
-        saveApkToDownloads,
-        installedApps,
-        markInstalled,
-        isInstalled,
-        getInstalledVersion,
-        hasUpdate,
-        clearInstalledApp,
-        downloadDirUri,
-        setDownloadDir,
-        pickDownloadDir,
-        downloadHistory,
-        clearHistory,
-      }}
-    >
+    <DownloadManagerContext.Provider value={ctxValue}>
       {children}
     </DownloadManagerContext.Provider>
   );
