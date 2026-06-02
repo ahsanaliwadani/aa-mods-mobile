@@ -50,6 +50,7 @@ const DOWNLOADS_KEY = "@aa_mods_downloads_v1";
 const DOWNLOAD_DIR_KEY = "@aa_mods_download_dir_v1";
 const FOLDER_PROMPTED_KEY = "@aa_mods_folder_prompted_v1";
 const SPEED_BOOST_KEY = "@aa_mods_speed_boost_until_v1";
+const FILES_ACCESS_PROMPTED_KEY = "@aa_mods_files_access_prompted_v1";
 
 export const SPEED_BOOST_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -547,6 +548,46 @@ export function DownloadManagerProvider({ children }: { children: React.ReactNod
           return;
         }
         logWifiOnlyBypassed(slug, appName);
+      }
+
+      // ── One-time "All Files Access" guidance prompt (Android only) ───────
+      if (Platform.OS === "android") {
+        try {
+          const alreadyPrompted = await AsyncStorage.getItem(FILES_ACCESS_PROMPTED_KEY);
+          if (!alreadyPrompted) {
+            await AsyncStorage.setItem(FILES_ACCESS_PROMPTED_KEY, "1");
+            await new Promise<void>((resolve) => {
+              Alert.alert(
+                "📂 Save APKs to Downloads",
+                "For the best experience, grant 'All Files Access' so downloaded APKs are saved directly to your Downloads folder and accessible from any file manager.\n\nYou can also skip this and pick a folder manually later.",
+                [
+                  {
+                    text: "Grant Access",
+                    onPress: () => {
+                      if (IntentLauncher) {
+                        IntentLauncher.startActivityAsync(
+                          "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION",
+                          { data: "package:com.aa.mods" },
+                        ).catch(() =>
+                          IntentLauncher?.startActivityAsync(
+                            "android.settings.APPLICATION_DETAILS_SETTINGS",
+                            { data: "package:com.aa.mods" },
+                          ).catch(() => {}),
+                        );
+                      }
+                      resolve();
+                    },
+                  },
+                  {
+                    text: "Skip for Now",
+                    style: "cancel",
+                    onPress: () => resolve(),
+                  },
+                ],
+              );
+            });
+          }
+        } catch {}
       }
 
       // ── Storage permission check (Android only) ───────────────────────
